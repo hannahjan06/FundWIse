@@ -14,8 +14,12 @@ function useSavedProfile() {
   const [profile, setProfile] = useState(() => {
     try {
       const saved = localStorage.getItem(PROFILE_KEY);
-      return saved ? { ...DEFAULT_PROFILE, ...JSON.parse(saved) } : DEFAULT_PROFILE;
-    } catch { return DEFAULT_PROFILE; }
+      if (!saved) return DEFAULT_PROFILE;
+      const parsed = JSON.parse(saved);
+      return { ...DEFAULT_PROFILE, ...parsed };
+    } catch { 
+      return DEFAULT_PROFILE; 
+    }
   });
 
   const saveProfile = (data) => {
@@ -23,12 +27,20 @@ function useSavedProfile() {
     delete toSave.loan_purpose;
     delete toSave.loan_amount_inr;
     setProfile(toSave);
-    try { localStorage.setItem(PROFILE_KEY, JSON.stringify(toSave)); } catch {}
+    try { 
+      localStorage.setItem(PROFILE_KEY, JSON.stringify(toSave)); 
+    } catch (e) {
+      console.error("Failed to save profile:", e);
+    }
   };
 
   const clearProfile = () => {
     setProfile(DEFAULT_PROFILE);
-    try { localStorage.removeItem(PROFILE_KEY); } catch {}
+    try { 
+      localStorage.removeItem(PROFILE_KEY); 
+    } catch (e) {
+      console.error("Failed to clear profile:", e);
+    }
   };
 
   const hasProfile = !!(profile.name && profile.monthly_income_inr);
@@ -54,7 +66,11 @@ const TAB_STEP  = { dashboard: 0, profile: 1, snapshot: 2, scheme: 3, decisions:
 
 function useFadeIn(dep) {
   const [v, setV] = useState(false);
-  useEffect(() => { setV(false); const t = setTimeout(() => setV(true), 40); return () => clearTimeout(t); }, [dep]);
+  useEffect(() => { 
+    setV(false); 
+    const t = setTimeout(() => setV(true), 40); 
+    return () => clearTimeout(t); 
+  }, [dep]);
   return v;
 }
 
@@ -145,7 +161,10 @@ function StatusBadge({ label, level }) {
 
 function AnimBar({ pct, color, delay=0 }) {
   const [w, setW] = useState(0);
-  useEffect(() => { const t = setTimeout(() => setW(pct), 200+delay); return () => clearTimeout(t); }, [pct]);
+  useEffect(() => { 
+    const t = setTimeout(() => setW(pct), 200+delay); 
+    return () => clearTimeout(t); 
+  }, [pct, delay]);
   return <div style={{ background:T.border, borderRadius:"6px", height:"10px", overflow:"hidden" }}>
     <div style={{ width:`${w}%`, height:"100%", background:color, borderRadius:"6px",
       transition:"width .9s cubic-bezier(.4,0,.2,1)" }} />
@@ -186,7 +205,10 @@ function polarToXY(cx,cy,r,angleDeg) {
 
 function RiskGauge({ score, label, description, delay=0 }) {
   const [animated, setAnimated] = useState(false);
-  useEffect(() => { const t = setTimeout(() => setAnimated(true), 300+delay); return () => clearTimeout(t); }, []);
+  useEffect(() => { 
+    const t = setTimeout(() => setAnimated(true), 300+delay); 
+    return () => clearTimeout(t); 
+  }, [delay]);
   const size=100, cx=50, cy=54, r=36, arcLen=Math.PI*r;
   const filled = animated ? (score/100)*arcLen : 0;
   const color = score<35?T.green:score<65?T.amber:T.red;
@@ -269,7 +291,7 @@ function ProfileImageUpload({ value, onChange }) {
           Drag & drop here, or click to browse · JPG, PNG, WEBP
         </div>
         <input ref={fileRef} type="file" accept="image/*" style={{ display:"none" }}
-          onChange={(e) => handleFile(e.target.files[0])} />
+          onChange={(e) => handleFile(e.target.files?.[0])} />
       </div>
     </div>
   );
@@ -299,7 +321,7 @@ function RepaymentPlanModal({ profile, onClose }) {
       }
     };
     fetchPlan();
-  }, []);
+  }, [profile]);
 
   const SEASON_COLOR = { sowing: T.green, growing: T.blue, harvest: "#b8f04a", lean: T.amber };
   const SEASON_EMOJI = { sowing: "🌱", growing: "🌿", harvest: "🌾", lean: "☀️" };
@@ -318,7 +340,7 @@ function RepaymentPlanModal({ profile, onClose }) {
           <div>
             <div style={{ fontSize:"18px", fontWeight:700, color:"#fff" }}>📅 Your Repayment Plan</div>
             <div style={{ fontSize:"13px", color:T.sidebarText, marginTop:"3px" }}>
-              ₹{parseFloat(profile.loan_amount_inr).toLocaleString("en-IN")} · {profile.loan_purpose}
+              ₹{parseFloat(profile.loan_amount_inr || 0).toLocaleString("en-IN")} · {profile.loan_purpose || 'Loan'}
             </div>
           </div>
           <button onClick={onClose} style={{ background:"rgba(255,255,255,.15)", border:"none",
@@ -343,9 +365,9 @@ function RepaymentPlanModal({ profile, onClose }) {
             <div>
               <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:"12px", marginBottom:"20px" }}>
                 {[
-                  { label:"Monthly Payment", val:`₹${plan.monthly_emi?.toLocaleString("en-IN")}`, color:T.text },
-                  { label:"Total Months", val:`${plan.total_months} months`, color:T.accent },
-                  { label:"Est. Total Paid", val:`₹${plan.total_paid?.toLocaleString("en-IN")}`, color:T.amber },
+                  { label:"Monthly Payment", val:`₹${(plan.monthly_emi || 0).toLocaleString("en-IN")}`, color:T.text },
+                  { label:"Total Months", val:`${plan.total_months || 0} months`, color:T.accent },
+                  { label:"Est. Total Paid", val:`₹${(plan.total_paid || 0).toLocaleString("en-IN")}`, color:T.amber },
                 ].map((m,i) => (
                   <div key={i} style={{ background:T.surfaceAlt, borderRadius:"12px",
                     padding:"16px", textAlign:"center", border:`1px solid ${T.border}` }}>
@@ -384,7 +406,7 @@ function RepaymentPlanModal({ profile, onClose }) {
                                 {se} {m.season ? m.season.charAt(0).toUpperCase() + m.season.slice(1) : ""}
                               </span>
                               <span style={{ fontSize:"13px", fontWeight:700, color:T.text }}>
-                                ₹{(m.emi_due||plan.monthly_emi).toLocaleString("en-IN")}
+                                ₹{(m.emi_due||plan.monthly_emi||0).toLocaleString("en-IN")}
                               </span>
                             </div>
                             <div style={{ fontSize:"12px", color:T.textMid, lineHeight:1.5 }}>{m.tip}</div>
@@ -440,21 +462,27 @@ function RepaymentPlanModal({ profile, onClose }) {
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
 const NAV_MAIN = [
   {id:"dashboard", label:"Dashboard"},
-  {id:"profile", label:"Profile Analysis"},
-  {id:"snapshot", label:"Snapshot"},
-  {id:"scheme", label:"Schemes"},
-  {id:"decisions", label:"Decisions"},
+  {
+    id:"profile", 
+    label:"Profile Analysis",
+    children: [
+      {id:"snapshot", label:"Snapshot"},
+      {id:"scheme", label:"Schemes"},
+      {id:"decisions", label:"Decisions"}
+    ]
+  },
   {id:"loan", label:"Loan Assessment"},
+  {id:"browse_schemes", label:"Browse Schemes"},
 ];
 
-function NavItem({ label, active, enabled, onClick, badge }) {
+function NavItem({ label, active, enabled, onClick, badge, isChild }) {
   const [h, setH] = useState(false);
   return <button onClick={onClick} onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)}
     style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
       width:"100%", textAlign:"left",
       background:active?T.sidebarActive:h&&enabled?T.sidebarHover:"transparent",
       color:active?T.sidebarActiveText:enabled?(h?"#fff":T.sidebarText):T.sidebarTextDim,
-      border:"none", padding:"10px 16px", fontSize:"13.5px",
+      border:"none", padding:isChild?"8px 16px 8px 32px":"10px 16px", fontSize:isChild?"12.5px":"13.5px",
       fontWeight:active?700:400, cursor:enabled?"pointer":"default",
       borderRadius:"8px", marginBottom:"2px",
       transition:"all .18s", opacity:enabled?1:0.4,
@@ -465,8 +493,58 @@ function NavItem({ label, active, enabled, onClick, badge }) {
   </button>;
 }
 
+function NavItemWithChildren({ item, active, onNav, hasResults }) {
+  const [expanded, setExpanded] = useState(true); // Always expanded when profile analysis has results
+  const [h, setH] = useState(false);
+  const can = (id) => ["dashboard","profile","loan","myprofile","browse_schemes"].includes(id) ? true : hasResults;
+  const isActive = active === item.id || (item.children && item.children.some(c => c.id === active));
+  
+  return (
+    <>
+      <button 
+        onClick={() => {
+          if (can(item.id)) {
+            onNav(item.id);
+            if (item.children) setExpanded(!expanded);
+          }
+        }}
+        onMouseEnter={() => setH(true)} 
+        onMouseLeave={() => setH(false)}
+        style={{ 
+          display:"flex", alignItems:"center", justifyContent:"space-between",
+          width:"100%", textAlign:"left",
+          background:isActive?T.sidebarActive:h&&can(item.id)?T.sidebarHover:"transparent",
+          color:isActive?T.sidebarActiveText:can(item.id)?(h?"#fff":T.sidebarText):T.sidebarTextDim,
+          border:"none", padding:"10px 16px", fontSize:"13.5px",
+          fontWeight:isActive?700:400, cursor:can(item.id)?"pointer":"default",
+          borderRadius:"8px", marginBottom:"2px",
+          transition:"all .18s", opacity:can(item.id)?1:0.4,
+          transform:h&&can(item.id)&&!isActive?"translateX(3px)":"translateX(0)" 
+        }}>
+        <span>{item.label}</span>
+        {item.children && hasResults && (
+          <span style={{ fontSize:"10px", transition:"transform .2s", transform:expanded?"rotate(180deg)":"rotate(0deg)" }}>▼</span>
+        )}
+      </button>
+      {item.children && expanded && hasResults && (
+        <div style={{ marginTop:"2px", marginBottom:"4px" }}>
+          {item.children.map(child => (
+            <NavItem 
+              key={child.id} 
+              label={child.label} 
+              active={active===child.id}
+              enabled={can(child.id)} 
+              onClick={() => can(child.id) && onNav(child.id)}
+              isChild={true}
+            />
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
 function Sidebar({ active, onNav, hasResults, hasProfile, profileImage }) {
-  const can = (id) => ["dashboard","profile","loan","myprofile"].includes(id) ? true : hasResults;
   return (
     <div style={{ width:"240px", minHeight:"100vh", background:T.sidebar, flexShrink:0,
       display:"flex", flexDirection:"column", padding:"24px 0",
@@ -479,17 +557,35 @@ function Sidebar({ active, onNav, hasResults, hasProfile, profileImage }) {
       </div>
 
       <nav style={{ flex:1, padding:"0 12px" }}>
-        {NAV_MAIN.map(item => (
-          <NavItem key={item.id} label={item.label} active={active===item.id}
-            enabled={can(item.id)} onClick={() => can(item.id) && onNav(item.id)} />
-        ))}
+        {NAV_MAIN.map(item => 
+          item.children ? (
+            <NavItemWithChildren 
+              key={item.id} 
+              item={item} 
+              active={active} 
+              onNav={onNav} 
+              hasResults={hasResults}
+            />
+          ) : (
+            <NavItem 
+              key={item.id} 
+              label={item.label} 
+              active={active===item.id}
+              enabled={["dashboard","profile","loan","myprofile","browse_schemes"].includes(item.id) ? true : hasResults} 
+              onClick={() => {
+                const canAccess = ["dashboard","profile","loan","myprofile","browse_schemes"].includes(item.id) ? true : hasResults;
+                if (canAccess) onNav(item.id);
+              }}
+            />
+          )
+        )}
         <div style={{ height:"1px", background:"#2d4a3e", margin:"16px 8px" }} />
         {["Report","Help & Support","Settings"].map(l => (
           <div key={l} style={{ padding:"10px 16px", fontSize:"13px", color:T.sidebarTextDim, opacity:0.5 }}>{l}</div>
         ))}
       </nav>
 
-      {/* My Profile button — white background */}
+      {/* My Profile button */}
       <div style={{ padding:"12px" }}>
         <button onClick={() => onNav("myprofile")}
           style={{ width:"100%", display:"flex", alignItems:"center", gap:"10px",
@@ -589,7 +685,7 @@ function Btn({ children, onClick, variant="primary", disabled=false }) {
         borderRadius:"10px", fontSize:"14px", fontWeight:600,
         cursor:"pointer", transition:"all .2s",
         boxShadow:isPrimary&&h?`0 6px 20px ${T.sidebar}50`:"none",
-        transform:h?"translateY(-1px)":"none", opacity:disabled?.5:1 }}>
+        transform:h?"translateY(-1px)":"none", opacity:disabled?0.5:1 }}>
       {children}
     </button>
   );
@@ -799,6 +895,302 @@ function SnapshotTab({ data, farmerName, onNav }) {
   );
 }
 
+// ─── Browse Schemes Tab ───────────────────────────────────────────────────────
+function SchemeButton({ scheme, selectedScheme, setSelectedScheme, categoryIcons }) {
+  const [h, setH] = useState(false);
+  const isSelected = selectedScheme?.id === scheme.id;
+  
+  return (
+    <button
+      onClick={() => setSelectedScheme(isSelected ? null : scheme)}
+      onMouseEnter={() => setH(true)}
+      onMouseLeave={() => setH(false)}
+      style={{
+        background:isSelected?T.accentLight:h?"#f7faf7":T.surface,
+        border:`1.5px solid ${isSelected?T.accent:h?"#b0c8b8":T.border}`,
+        borderRadius:"12px", padding:"18px 20px", cursor:"pointer",
+        textAlign:"left", width:"100%", transition:"all .2s",
+        transform:h&&!isSelected?"translateY(-2px)":"none",
+        boxShadow:h?"0 4px 16px rgba(0,0,0,.08)":"0 1px 4px rgba(0,0,0,.04)"
+      }}>
+      <div style={{ display:"flex", gap:"12px", alignItems:"start" }}>
+        <div style={{ fontSize:"28px", flexShrink:0 }}>
+          {categoryIcons[scheme.category] || "📋"}
+        </div>
+        <div style={{ flex:1 }}>
+          <div style={{ fontSize:"15px", fontWeight:600, color:T.text, marginBottom:"4px" }}>
+            {scheme.name}
+          </div>
+          <div style={{ fontSize:"11px", color:T.textDim, textTransform:"uppercase",
+            letterSpacing:".05em", fontWeight:600, marginBottom:"8px" }}>
+            {scheme.category}
+          </div>
+          <div style={{ fontSize:"13px", color:T.textMid, lineHeight:1.6, marginBottom:"8px" }}>
+            {scheme.description}
+          </div>
+          {/* Show additional details when available */}
+          {scheme.eligibility_criteria && (
+            <div style={{ fontSize:"11px", color:T.textDim, marginTop:"6px" }}>
+              <strong>Eligibility:</strong> {scheme.eligibility_criteria}
+            </div>
+          )}
+          {scheme.coverage_details && (
+            <div style={{ fontSize:"11px", color:T.textDim, marginTop:"4px" }}>
+              <strong>Coverage:</strong> {scheme.coverage_details}
+            </div>
+          )}
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function FilterButton({ cat, filter, setFilter }) {
+  const [h, setH] = useState(false);
+  return (
+    <button
+      onClick={() => setFilter(cat)}
+      onMouseEnter={() => setH(true)}
+      onMouseLeave={() => setH(false)}
+      style={{
+        padding:"8px 18px", borderRadius:"50px",
+        border:`1.5px solid ${filter===cat?T.accent:h?T.textDim:T.border}`,
+        background:filter===cat?T.accent:h?T.surfaceAlt:T.surface,
+        color:filter===cat?"#fff":h?T.text:T.textMid,
+        fontSize:"13px", fontWeight:filter===cat?600:400,
+        cursor:"pointer", transition:"all .2s",
+        textTransform:"capitalize",
+        transform:h&&filter!==cat?"scale(1.02)":"scale(1)"
+      }}>
+      {cat === "all" ? "All Schemes" : cat}
+    </button>
+  );
+}
+
+function BrowseSchemesTab() {
+  const [schemes, setSchemes] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedScheme, setSelectedScheme] = useState(null);
+  const [filter, setFilter] = useState("all");
+  const visible = useFadeIn("browse_schemes");
+
+  useEffect(() => {
+    const fetchSchemes = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/schemes`);
+        if (!res.ok) throw new Error("Failed to fetch schemes");
+        const data = await res.json();
+        setSchemes(data);
+      } catch(e) {
+        console.error("Error fetching schemes:", e);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchSchemes();
+  }, []);
+
+  const categories = ["all", ...new Set(schemes.map(s => s.category))];
+  const filteredSchemes = filter === "all" ? schemes : schemes.filter(s => s.category === filter);
+
+  const CATEGORY_ICONS = {
+    "Crop Insurance": "🛡️",
+    "Credit": "💳",
+    "Direct Benefit Transfer": "💰",
+    "Input Subsidy": "🌱",
+    "Irrigation": "💧",
+  };
+
+  if (loading) {
+    return (
+      <div style={{ display:"flex", flexDirection:"column", alignItems:"center", padding:"80px" }}>
+        <div style={{ width:"44px", height:"44px", border:"3px solid #e0e0e0", borderTop:`3px solid ${T.accent}`,
+          borderRadius:"50%", animation:"spin 1s linear infinite", marginBottom:"20px" }} />
+        <div style={{ fontSize:"15px", color:T.textMid }}>Loading schemes...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ opacity:visible?1:0, transform:visible?"none":"translateY(10px)", transition:"all .35s ease" }}>
+      <div style={{ marginBottom:"28px" }}>
+        <h2 style={{ fontSize:"28px", fontWeight:600, color:T.text, margin:"0 0 6px", letterSpacing:"-.02em" }}>
+          All Government Schemes
+        </h2>
+        <p style={{ fontSize:"14px", color:T.textMid }}>
+          Browse all available government schemes for farmers. Click any scheme to see full details.
+        </p>
+      </div>
+
+      {/* Filter buttons */}
+      <div style={{ display:"flex", gap:"10px", marginBottom:"24px", flexWrap:"wrap" }}>
+        {categories.map(cat => (
+          <FilterButton key={cat} cat={cat} filter={filter} setFilter={setFilter} />
+        ))}
+      </div>
+
+      {/* Schemes Grid */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(2, 1fr)", gap:"12px", marginBottom:"20px" }}>
+        {filteredSchemes.map((scheme, i) => (
+          <SchemeButton key={i} scheme={scheme} selectedScheme={selectedScheme} setSelectedScheme={setSelectedScheme} categoryIcons={CATEGORY_ICONS} />
+        ))}
+      </div>
+
+      {/* Centered Modal Popup */}
+      {selectedScheme && (
+        <div 
+          style={{ 
+            position:"fixed", 
+            top:0, 
+            left:"240px", // Offset by sidebar width
+            right:0, 
+            bottom:0, 
+            background:"rgba(0,0,0,.6)", 
+            zIndex:1000,
+            display:"flex", 
+            alignItems:"center", 
+            justifyContent:"center", 
+            padding:"40px",
+            backdropFilter:"blur(4px)"
+          }}
+          onClick={(e) => e.target === e.currentTarget && setSelectedScheme(null)}
+        >
+          <div style={{ 
+            background:T.surface, 
+            borderRadius:"20px", 
+            width:"100%", 
+            maxWidth:"900px",  // Increased width
+            maxHeight:"85vh", 
+            overflow:"hidden",
+            display:"flex", 
+            flexDirection:"column",
+            boxShadow:"0 24px 80px rgba(0,0,0,.3)",
+            animation:"modalSlideIn .3s ease"
+          }}>
+            
+            {/* Modal Header */}
+            <div style={{ 
+              padding:"24px 32px", 
+              borderBottom:`1px solid ${T.border}`,
+              display:"flex", 
+              justifyContent:"space-between", 
+              alignItems:"flex-start",
+              background:T.sidebar,
+              borderRadius:"20px 20px 0 0"
+            }}>
+              <div style={{ flex:1, display:"flex", gap:"16px", alignItems:"start" }}>
+                <div style={{ fontSize:"40px" }}>
+                  {CATEGORY_ICONS[selectedScheme.category] || "📋"}
+                </div>
+                <div>
+                  <div style={{ fontSize:"22px", fontWeight:700, color:"#fff", marginBottom:"6px" }}>{selectedScheme.name}</div>
+                  <div style={{ fontSize:"13px", color:T.sidebarText, textTransform:"uppercase", letterSpacing:".08em", fontWeight:600 }}>
+                    {selectedScheme.category}
+                  </div>
+                </div>
+              </div>
+              <button 
+                onClick={() => setSelectedScheme(null)}
+                style={{ 
+                  background:"rgba(255,255,255,.15)", 
+                  border:"none",
+                  borderRadius:"8px", 
+                  color:"#fff", 
+                  padding:"8px 14px", 
+                  cursor:"pointer", 
+                  fontSize:"13px",
+                  fontWeight:600,
+                  marginLeft:"16px",
+                  flexShrink:0
+                }}>
+                Close ✕
+              </button>
+            </div>
+
+            {/* Modal Content - Scrollable */}
+            <div style={{ 
+              overflowY:"auto", 
+              padding:"32px", 
+              flex:1
+            }}>
+              <div style={{ display:"grid", gap:"16px" }}>
+                {/* Description */}
+                <div style={{ background:T.surfaceAlt, borderRadius:"12px", padding:"20px 24px", border:`1px solid ${T.border}` }}>
+                  <div style={{ fontSize:"11px", color:T.textDim, fontWeight:700, marginBottom:"10px", letterSpacing:".1em" }}>📋 ABOUT THIS SCHEME</div>
+                  <p style={{ fontSize:"15px", color:T.text, lineHeight:1.8, margin:0 }}>{selectedScheme.description}</p>
+                </div>
+
+                {/* Benefit - Highlighted */}
+                <div style={{ background:T.accentLight, borderRadius:"14px", padding:"22px 26px", border:`2px solid ${T.accent}50` }}>
+                  <div style={{ fontSize:"11px", color:T.accent, fontWeight:700, marginBottom:"10px", letterSpacing:".1em" }}>💰 WHAT YOU GET</div>
+                  <div style={{ fontSize:"20px", color:T.text, fontWeight:700, lineHeight:1.5 }}>{selectedScheme.benefit_inr}</div>
+                </div>
+
+                {/* Two Column Layout for Details */}
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"14px" }}>
+                  {/* Eligibility */}
+                  {selectedScheme.eligibility_criteria && (
+                    <div style={{ background:"#f0f8ff", borderRadius:"12px", padding:"18px 22px", border:`1px solid #b8d4f0` }}>
+                      <div style={{ fontSize:"11px", color:T.blue, fontWeight:700, marginBottom:"10px", letterSpacing:".08em" }}>✓ WHO CAN APPLY</div>
+                      <div style={{ fontSize:"14px", color:T.text, lineHeight:1.75 }}>{selectedScheme.eligibility_criteria}</div>
+                    </div>
+                  )}
+
+                  {/* Coverage Details */}
+                  {selectedScheme.coverage_details && (
+                    <div style={{ background:T.greenLight, borderRadius:"12px", padding:"18px 22px", border:`1px solid #c0e8d0` }}>
+                      <div style={{ fontSize:"11px", color:T.green, fontWeight:700, marginBottom:"10px", letterSpacing:".08em" }}>🛡️ WHAT'S COVERED</div>
+                      <div style={{ fontSize:"14px", color:T.text, lineHeight:1.75 }}>{selectedScheme.coverage_details}</div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Premium/Cost Details */}
+                {selectedScheme.premium_details && (
+                  <div style={{ background:T.amberLight, borderRadius:"12px", padding:"18px 24px", border:`1px solid #f0d8b8` }}>
+                    <div style={{ fontSize:"11px", color:T.amber, fontWeight:700, marginBottom:"10px", letterSpacing:".08em" }}>💳 COST / PREMIUM</div>
+                    <div style={{ fontSize:"15px", color:T.text, lineHeight:1.8 }}>{selectedScheme.premium_details}</div>
+                  </div>
+                )}
+
+                {/* Application Process */}
+                {selectedScheme.application_process && (
+                  <div style={{ background:"#fff5f0", borderRadius:"12px", padding:"18px 24px", border:`1px solid #ffd4c0` }}>
+                    <div style={{ fontSize:"11px", color:"#d87040", fontWeight:700, marginBottom:"10px", letterSpacing:".08em" }}>📝 HOW TO APPLY</div>
+                    <div style={{ fontSize:"15px", color:T.text, lineHeight:1.8 }}>{selectedScheme.application_process}</div>
+                  </div>
+                )}
+
+                {/* Info Box */}
+                <div style={{ background:T.greenLight, borderRadius:"12px", padding:"18px 24px", border:`1px solid #c0e8d0` }}>
+                  <div style={{ fontSize:"11px", color:T.green, fontWeight:700, marginBottom:"8px", letterSpacing:".08em" }}>💡 TIP</div>
+                  <p style={{ fontSize:"14px", color:T.text, lineHeight:1.75, margin:0 }}>
+                    To check if you're eligible for this scheme and get personalized recommendations, run a Profile Analysis. 
+                    We'll assess your situation and tell you which schemes are worth applying for.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <style>{`
+        @keyframes modalSlideIn {
+          from {
+            opacity: 0;
+            transform: translateY(-20px) scale(0.95);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+      `}</style>
+    </div>
+  );
+}
+
 // ─── Schemes Tab ──────────────────────────────────────────────────────────────
 const SUIT_C = {
   recommended:{ bg:"#eaf7f0", text:"#3a9a64", border:"#c0e8d0" },
@@ -841,56 +1233,197 @@ function SchemesTab({ schemes, onNav }) {
   const [sel, setSel] = useState(null);
   const visible = useFadeIn("schemes");
   const s = sel!==null ? schemes[sel] : null;
+  
   return (
     <div style={{ opacity:visible?1:0, transform:visible?"none":"translateY(10px)", transition:"all .35s ease" }}>
       <div style={{ marginBottom:"28px" }}>
         <h2 style={{ fontSize:"28px", fontWeight:600, color:T.text, margin:"0 0 6px", letterSpacing:"-.02em" }}>Government Help Available for You</h2>
         <p style={{ fontSize:"14px", color:T.textMid }}>We checked which schemes make sense for your situation — not just if you qualify, but if they're actually worth your time.</p>
       </div>
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"16px" }}>
-        <div style={{ display:"grid", gap:"10px", alignContent:"start" }}>
-          {schemes.map((sc,i) => <SchemeCard key={i} scheme={sc} isSelected={sel===i} onClick={()=>setSel(sel===i?null:i)} />)}
-        </div>
-        <div>
-          {s ? (
-            <SectionCard>
-              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:"16px" }}>
-                <div>
-                  <div style={{ fontSize:"17px", fontWeight:700, color:T.text, marginBottom:"4px" }}>{s.name}</div>
-                  <div style={{ fontSize:"12px", color:T.textDim }}>{s.category}</div>
-                </div>
-                <span style={{ padding:"4px 12px", borderRadius:"12px", fontSize:"12px", fontWeight:600,
-                  background:s.eligible?T.greenLight:T.redLight, color:s.eligible?T.green:T.red,
-                  border:`1px solid ${s.eligible?"#c0e8d0":"#f0c8c0"}` }}>
+      
+      {/* Scheme Cards Grid */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(2, 1fr)", gap:"12px", marginBottom:"20px" }}>
+        {schemes.map((sc,i) => <SchemeCard key={i} scheme={sc} isSelected={sel===i} onClick={()=>setSel(i)} />)}
+      </div>
+
+      {/* Centered Modal Popup */}
+      {s && (
+        <div 
+          style={{ 
+            position:"fixed", 
+            top:0, 
+            left:"240px", // Offset by sidebar width
+            right:0, 
+            bottom:0, 
+            background:"rgba(0,0,0,.6)", 
+            zIndex:1000,
+            display:"flex", 
+            alignItems:"center", 
+            justifyContent:"center", 
+            padding:"40px",
+            backdropFilter:"blur(4px)"
+          }}
+          onClick={(e) => e.target === e.currentTarget && setSel(null)}
+        >
+          <div style={{ 
+            background:T.surface, 
+            borderRadius:"20px", 
+            width:"100%", 
+            maxWidth:"900px",  // Increased width from 720px
+            maxHeight:"85vh", 
+            overflow:"hidden",
+            display:"flex", 
+            flexDirection:"column",
+            boxShadow:"0 24px 80px rgba(0,0,0,.3)",
+            animation:"modalSlideIn .3s ease"
+          }}>
+            
+            {/* Modal Header */}
+            <div style={{ 
+              padding:"24px 32px", 
+              borderBottom:`1px solid ${T.border}`,
+              display:"flex", 
+              justifyContent:"space-between", 
+              alignItems:"flex-start",
+              background:T.sidebar,
+              borderRadius:"20px 20px 0 0"
+            }}>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:"22px", fontWeight:700, color:"#fff", marginBottom:"6px" }}>{s.name}</div>
+                <div style={{ fontSize:"13px", color:T.sidebarText, marginBottom:"10px" }}>{s.category}</div>
+                <span style={{ 
+                  display:"inline-block",
+                  padding:"6px 14px", 
+                  borderRadius:"20px", 
+                  fontSize:"12px", 
+                  fontWeight:600,
+                  background:s.eligible?"rgba(184,240,74,.9)":"rgba(200,74,58,.9)", 
+                  color:s.eligible?T.sidebarActiveText:"#fff",
+                  border:"none"
+                }}>
                   {s.eligible?"✓ You Qualify":"✕ You Don't Qualify"}
                 </span>
               </div>
-              <div style={{ borderTop:`1px solid ${T.border}`, paddingTop:"16px", display:"grid", gap:"14px" }}>
-                <p style={{ fontSize:"13px", color:T.textMid, lineHeight:1.75 }}>{s.reason}</p>
-                <div style={{ background:T.accentLight, borderRadius:"10px", padding:"14px 18px" }}>
-                  <div style={{ fontSize:"11px", color:T.accent, fontWeight:700, marginBottom:"4px" }}>WHAT YOU GET</div>
-                  <div style={{ fontSize:"14px", color:T.text, fontWeight:600 }}>{s.benefit_inr}</div>
+              <button 
+                onClick={() => setSel(null)}
+                style={{ 
+                  background:"rgba(255,255,255,.15)", 
+                  border:"none",
+                  borderRadius:"8px", 
+                  color:"#fff", 
+                  padding:"8px 14px", 
+                  cursor:"pointer", 
+                  fontSize:"13px",
+                  fontWeight:600,
+                  marginLeft:"16px",
+                  flexShrink:0
+                }}>
+                Close ✕
+              </button>
+            </div>
+
+            {/* Modal Content - Scrollable */}
+            <div style={{ 
+              overflowY:"auto", 
+              padding:"32px", 
+              flex:1
+            }}>
+              <div style={{ display:"grid", gap:"16px" }}>
+                {/* Description and AI Reasoning */}
+                <div style={{ background:T.surfaceAlt, borderRadius:"12px", padding:"20px 24px", border:`1px solid ${T.border}` }}>
+                  <div style={{ fontSize:"11px", color:T.textDim, fontWeight:700, marginBottom:"10px", letterSpacing:".1em" }}>📋 ABOUT THIS SCHEME</div>
+                  <p style={{ fontSize:"15px", color:T.textMid, lineHeight:1.8, marginBottom:"14px" }}>{s.description}</p>
+                  <div style={{ borderTop:`1px solid ${T.border}`, paddingTop:"14px", marginTop:"14px" }}>
+                    <div style={{ fontSize:"11px", color:T.accent, fontWeight:700, marginBottom:"8px", letterSpacing:".1em" }}>💬 WHY THIS RECOMMENDATION</div>
+                    <p style={{ fontSize:"15px", color:T.text, lineHeight:1.8, fontStyle:"italic", margin:0 }}>{s.reason}</p>
+                  </div>
                 </div>
-                {s.action_required && (
-                  <div style={{ background:T.greenLight, borderRadius:"10px", padding:"14px 18px", border:`1px solid #c0e8d0` }}>
-                    <div style={{ fontSize:"11px", color:T.green, fontWeight:700, marginBottom:"4px" }}>WHAT YOU SHOULD DO</div>
-                    <div style={{ fontSize:"13px", color:T.textMid }}>{s.action_required}</div>
+
+                {/* Benefit */}
+                <div style={{ background:T.accentLight, borderRadius:"14px", padding:"22px 26px", border:`2px solid ${T.accent}50` }}>
+                  <div style={{ fontSize:"11px", color:T.accent, fontWeight:700, marginBottom:"10px", letterSpacing:".1em" }}>💰 WHAT YOU GET</div>
+                  <div style={{ fontSize:"20px", color:T.text, fontWeight:700, lineHeight:1.5 }}>{s.benefit_inr}</div>
+                </div>
+
+                {/* Two Column Layout for Details */}
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"14px" }}>
+                  {/* Eligibility */}
+                  {s.eligibility_criteria && (
+                    <div style={{ background:"#f0f8ff", borderRadius:"12px", padding:"18px 22px", border:`1px solid #b8d4f0` }}>
+                      <div style={{ fontSize:"11px", color:T.blue, fontWeight:700, marginBottom:"10px", letterSpacing:".08em" }}>✓ WHO CAN APPLY</div>
+                      <div style={{ fontSize:"14px", color:T.text, lineHeight:1.75 }}>{s.eligibility_criteria}</div>
+                    </div>
+                  )}
+
+                  {/* Coverage Details */}
+                  {s.coverage_details && (
+                    <div style={{ background:T.greenLight, borderRadius:"12px", padding:"18px 22px", border:`1px solid #c0e8d0` }}>
+                      <div style={{ fontSize:"11px", color:T.green, fontWeight:700, marginBottom:"10px", letterSpacing:".08em" }}>🛡️ WHAT'S COVERED</div>
+                      <div style={{ fontSize:"14px", color:T.text, lineHeight:1.75 }}>{s.coverage_details}</div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Premium/Cost Details */}
+                {s.premium_details && (
+                  <div style={{ background:T.amberLight, borderRadius:"12px", padding:"18px 24px", border:`1px solid #f0d8b8` }}>
+                    <div style={{ fontSize:"11px", color:T.amber, fontWeight:700, marginBottom:"10px", letterSpacing:".08em" }}>💳 COST / PREMIUM</div>
+                    <div style={{ fontSize:"15px", color:T.text, lineHeight:1.8 }}>{s.premium_details}</div>
                   </div>
                 )}
-              </div>
-            </SectionCard>
-          ) : (
-            <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"220px",
-              border:`1.5px dashed ${T.border}`, borderRadius:"14px" }}>
-              <div style={{ textAlign:"center" }}>
-                <div style={{ fontSize:"32px", marginBottom:"10px", color:T.textDim }}>←</div>
-                <div style={{ fontSize:"13px", color:T.textDim }}>Tap a scheme to see details</div>
+
+                {/* Application Process */}
+                {s.application_process && (
+                  <div style={{ background:"#fff5f0", borderRadius:"12px", padding:"18px 24px", border:`1px solid #ffd4c0` }}>
+                    <div style={{ fontSize:"11px", color:"#d87040", fontWeight:700, marginBottom:"10px", letterSpacing:".08em" }}>📝 HOW TO APPLY</div>
+                    <div style={{ fontSize:"15px", color:T.text, lineHeight:1.8 }}>{s.application_process}</div>
+                  </div>
+                )}
+
+                {/* Quick Action */}
+                {s.action_required && (
+                  <div style={{ background:"linear-gradient(135deg, #2d6a54 0%, #3a9a64 100%)", borderRadius:"12px", padding:"20px 24px", border:"none", boxShadow:"0 4px 16px rgba(45,106,84,.3)" }}>
+                    <div style={{ fontSize:"11px", color:"rgba(255,255,255,.85)", fontWeight:700, marginBottom:"10px", letterSpacing:".1em" }}>⚡ NEXT STEP FOR YOU</div>
+                    <div style={{ fontSize:"16px", color:"#fff", fontWeight:600, lineHeight:1.6 }}>{s.action_required}</div>
+                  </div>
+                )}
+
+                {/* Benefit-Effort Score Visual */}
+                <div style={{ background:T.surfaceAlt, borderRadius:"12px", padding:"18px 24px", border:`1px solid ${T.border}` }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"12px" }}>
+                    <span style={{ fontSize:"11px", color:T.textDim, fontWeight:700, letterSpacing:".08em" }}>⭐ WORTH YOUR TIME?</span>
+                    <span style={{ fontSize:"22px", fontWeight:700, color:T.accent }}>{s.benefit_effort_score}/10</span>
+                  </div>
+                  <div style={{ background:T.border, borderRadius:"6px", height:"10px", overflow:"hidden" }}>
+                    <div style={{ height:"100%", width:`${(s.benefit_effort_score||0)*10}%`, background:T.accent, borderRadius:"6px", transition:"width .6s ease" }} />
+                  </div>
+                  <div style={{ fontSize:"13px", color:T.textMid, marginTop:"10px", fontStyle:"italic", lineHeight:1.6 }}>
+                    {s.benefit_effort_score >= 8 ? "Highly recommended - great benefit for minimal effort" :
+                     s.benefit_effort_score >= 6 ? "Good option - worth applying if eligible" :
+                     s.benefit_effort_score >= 4 ? "Consider - moderate effort required" :
+                     "May not be worth the effort for your situation"}
+                  </div>
+                </div>
               </div>
             </div>
-          )}
+          </div>
         </div>
-      </div>
+      )}
+
       <NavButtons tab="scheme" onNav={onNav} hasResults={true} />
+      
+      <style>{`
+        @keyframes modalSlideIn {
+          from {
+            opacity: 0;
+            transform: translateY(-20px) scale(0.95);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+      `}</style>
     </div>
   );
 }
@@ -1273,7 +1806,7 @@ function DashboardTab({ onStart, hasProfile, farmerName }) {
   );
 }
 
-// ─── My Profile Tab — UPDATED ─────────────────────────────────────────────────
+// ─── My Profile Tab ───────────────────────────────────────────────────────────
 function MyProfileTab({ savedProfile, onSave, onClear }) {
   const [form, setForm] = useState({ ...savedProfile });
   const [saved, setSaved] = useState(false);
@@ -1303,13 +1836,11 @@ function MyProfileTab({ savedProfile, onSave, onClear }) {
         </p>
       </div>
 
-      {/* Photo upload — full width at top */}
       <ProfileImageUpload
         value={form.profile_image || null}
         onChange={(img) => set("profile_image", img)}
       />
 
-      {/* Personal Details — 3-col grid like Profile Analysis */}
       <SectionCard title="Personal Details">
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:"20px" }}>
           <div style={{ gridColumn:"1 / 2" }}>
@@ -1339,7 +1870,6 @@ function MyProfileTab({ savedProfile, onSave, onClear }) {
         </div>
       </SectionCard>
 
-      {/* Income & Debt — 3-col */}
       <SectionCard title="Income & Debt">
         <div style={{ marginBottom:"20px" }}>
           <FieldLabel>How Do You Earn?</FieldLabel>
@@ -1359,7 +1889,6 @@ function MyProfileTab({ savedProfile, onSave, onClear }) {
         </div>
       </SectionCard>
 
-      {/* Risks */}
       <SectionCard title="Risks You Face">
         <p style={{ fontSize:"13px", color:T.textMid, marginBottom:"14px" }}>Select everything that could affect your income.</p>
         <div style={{ display:"flex", flexWrap:"wrap", gap:"10px" }}>
@@ -1367,13 +1896,12 @@ function MyProfileTab({ savedProfile, onSave, onClear }) {
         </div>
       </SectionCard>
 
-      {/* Actions */}
       <div style={{ display:"flex", gap:"12px" }}>
         <button onClick={handleSave}
           style={{ flex:1, padding:"14px 24px", background:saved?T.green:T.sidebar,
             color:"#fff", border:"none", borderRadius:"12px",
             fontSize:"15px", fontWeight:600, cursor:"pointer", transition:"all .3s",
-            boxShadow:`0 2px 8px rgba(0,0,0,.1)` }}>
+            boxShadow:"0 2px 8px rgba(0,0,0,.1)" }}>
           {saved ? "✓ Profile Saved!" : "Save My Profile"}
         </button>
         <button onClick={() => { onClear(); setForm({...DEFAULT_PROFILE}); }}
@@ -1417,7 +1945,7 @@ export default function App() {
     } catch(e) { setError(e.message); } finally { setLoading(false); }
   };
 
-  const noStepBar = ["loan","myprofile"].includes(activeTab);
+  const noStepBar = ["loan","myprofile","browse_schemes"].includes(activeTab);
 
   return (
     <div style={{ display:"flex", minHeight:"100vh", background:T.bg }}>
@@ -1425,8 +1953,12 @@ export default function App() {
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
         * { box-sizing:border-box; margin:0; padding:0; font-family:'Poppins',sans-serif; }
         input::placeholder { color:#b8ccbf; }
-        ::-webkit-scrollbar { width:5px; } ::-webkit-scrollbar-thumb { background:#ccdacc; border-radius:4px; }
-        @keyframes spin { from { transform:rotate(0deg); } to { transform:rotate(360deg); } }
+        ::-webkit-scrollbar { width:5px; } 
+        ::-webkit-scrollbar-thumb { background:#ccdacc; border-radius:4px; }
+        @keyframes spin { 
+          from { transform:rotate(0deg); } 
+          to { transform:rotate(360deg); } 
+        }
       `}</style>
 
       <Sidebar
@@ -1449,6 +1981,7 @@ export default function App() {
         {activeTab==="dashboard" && <DashboardTab onStart={()=>setActiveTab("profile")} hasProfile={hasProfile} farmerName={savedProfile.name} />}
         {activeTab==="profile" && <ProfileTab onSubmit={handleAnalyse} loading={loading} savedProfile={savedProfile} />}
         {activeTab==="snapshot" && results && <SnapshotTab data={results} farmerName={farmerName} onNav={setActiveTab} />}
+        {activeTab==="browse_schemes" && <BrowseSchemesTab />}
         {activeTab==="scheme" && results && <SchemesTab schemes={results.scheme_recommendations} onNav={setActiveTab} />}
         {activeTab==="decisions" && results && <DecisionTab decision={results.final_decision} farmerName={farmerName} onNav={setActiveTab} />}
         {activeTab==="loan" && <LoanTab savedProfile={savedProfile} />}

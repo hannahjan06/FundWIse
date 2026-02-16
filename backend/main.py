@@ -70,21 +70,94 @@ def call_groq(prompt: str, max_tokens: int = 800) -> dict:
 
 
 SCHEMES_DB = [
-    {"id": "pmfby", "name": "PM Fasal Bima Yojana", "category": "Crop Insurance",
-     "description": "Crop insurance against weather events, pests, and natural calamities.",
-     "benefit_inr": "Up to full sum insured based on crop loss"},
-    {"id": "kcc", "name": "Kisan Credit Card", "category": "Credit",
-     "description": "Revolving credit for farm inputs at 4-7% interest with seasonal repayment.",
-     "benefit_inr": "Up to Rs.3,00,000 credit limit"},
-    {"id": "pmkisan", "name": "PM-KISAN", "category": "Direct Benefit Transfer",
-     "description": "Rs.6,000 per year direct income support in three installments.",
-     "benefit_inr": "Rs.6,000/year"},
-    {"id": "shc", "name": "Soil Health Card Scheme", "category": "Input Subsidy",
-     "description": "Free soil testing with subsidised fertiliser recommendations.",
-     "benefit_inr": "Saves Rs.2,000-8,000/year on fertiliser"},
-    {"id": "pmksy", "name": "PM Krishi Sinchai Yojana", "category": "Irrigation",
-     "description": "Subsidy on drip/sprinkler irrigation infrastructure.",
-     "benefit_inr": "Up to 55% subsidy on irrigation equipment"},
+    {
+        "id": "pmfby",
+        "name": "PM Fasal Bima Yojana",
+        "category": "Crop Insurance",
+        "description": "Comprehensive crop insurance against natural calamities, pests, and diseases with minimal premium paid by farmers.",
+        "benefit_inr": "Up to full sum insured (based on crop value and area)",
+        "eligibility_criteria": "All farmers including sharecroppers and tenant farmers growing notified crops in notified areas",
+        "coverage_details": "Covers yield losses due to non-preventable natural risks from pre-sowing to post-harvest. Includes prevented sowing, localized calamities (hailstorm, landslide, inundation), and post-harvest losses",
+        "premium_details": "Kharif: 2% of sum insured, Rabi: 1.5%, Annual commercial/horticultural: 5%. Rest subsidized by government",
+        "application_process": "Apply through nearest bank branch, Common Service Center (CSC), agriculture office, or online portal within cut-off dates (usually 7 days before sowing)"
+    },
+    {
+        "id": "kcc",
+        "name": "Kisan Credit Card",
+        "category": "Credit",
+        "description": "Revolving credit facility for short-term agricultural needs including seeds, fertilizers, pesticides, and allied activities with flexible repayment.",
+        "benefit_inr": "Up to ₹3,00,000 credit limit (can be higher based on landholding and cropping pattern)",
+        "eligibility_criteria": "Farmers (owners/tenants), self-help groups, joint liability groups engaged in agriculture and allied activities. No age limit for individual farmers",
+        "coverage_details": "Covers crop cultivation, post-harvest expenses, maintenance of farm assets, working capital for allied activities, consumption needs. Valid for 5 years with annual review",
+        "premium_details": "Interest: 7% per annum (4% effective rate with 3% subvention). Additional 3% interest subvention for prompt repayment. No processing fee for loans up to ₹3 lakh",
+        "application_process": "Visit nearest bank branch (priority sector lending bank) with land records, Aadhaar, PAN. Can also apply through PM Kisan portal if registered"
+    },
+    {
+        "id": "pmkisan",
+        "name": "PM-KISAN",
+        "category": "Direct Benefit Transfer",
+        "description": "Direct income support of ₹6,000 per year to all landholding farmer families in three equal installments of ₹2,000 each.",
+        "benefit_inr": "₹6,000 per year (₹2,000 per installment, 3 times yearly)",
+        "eligibility_criteria": "All landholding farmer families (including small and marginal). Excludes institutional landholders, government employees, and income tax payees",
+        "coverage_details": "No restrictions on land size. Automatically enrolled in all states (except West Bengal). Money directly transferred to bank account linked with Aadhaar",
+        "premium_details": "Free - no cost to farmers. Government scheme with direct benefit transfer",
+        "application_process": "Self-registration on PM-KISAN portal or through Common Service Centers (CSC). Villages also conduct camps for registration. Needs Aadhaar, bank account, land records"
+    },
+    {
+        "id": "shc",
+        "name": "Soil Health Card Scheme",
+        "category": "Input Subsidy",
+        "description": "Free soil testing and customized fertilizer recommendations to improve soil fertility and reduce input costs while increasing yields.",
+        "benefit_inr": "Saves ₹2,000-8,000/year on fertilizer costs through optimized usage",
+        "eligibility_criteria": "All farmers across India. Issued every 2 years to track soil health changes",
+        "coverage_details": "Tests for 12 parameters: N, P, K (macro-nutrients), S (secondary nutrient), Zn, Fe, Cu, Mn, Bo (micro-nutrients), pH, EC, OC. Provides crop-wise fertilizer recommendations",
+        "premium_details": "Completely free. Government bears cost of soil sample collection, testing, and card printing",
+        "application_process": "Contact village agriculture extension officer or nearest Krishi Vigyan Kendra (KVK). Soil samples collected from your field and tested at government labs"
+    },
+    {
+        "id": "pmksy",
+        "name": "PM Krishi Sinchai Yojana (PMKSY)",
+        "category": "Irrigation",
+        "description": "Per Drop More Crop - promotes micro-irrigation (drip and sprinkler) to enhance water use efficiency and increase crop productivity.",
+        "benefit_inr": "Up to 55% subsidy on drip/sprinkler systems (up to 90% for SC/ST farmers in some states)",
+        "eligibility_criteria": "All farmers with land ownership or lease deed. Priority to small and marginal farmers, SC/ST, women farmers",
+        "coverage_details": "Subsidy for drip irrigation, sprinkler systems, rainwater harvesting structures, farm ponds. Covers cost of equipment, installation, and training",
+        "premium_details": "Small & Marginal Farmers: 55% subsidy, Other Farmers: 45% subsidy, SC/ST/Women in some states: up to 90% subsidy. Varies by state and category",
+        "application_process": "Apply online through state agriculture department portal or visit District Agriculture Office. Need land documents, Aadhaar, bank details, and quotations from approved vendors"
+    },
+    {
+        "id": "nabard_dairy",
+        "name": "NABARD Dairy Entrepreneurship Development Scheme",
+        "category": "Credit",
+        "description": "Comprehensive scheme to promote dairy farming with subsidized credit for purchasing milch animals, farm equipment, and setting up dairy infrastructure.",
+        "benefit_inr": "Up to 33% capital subsidy (SC/ST: 50%) on project cost. Loans up to ₹60 lakh for small units",
+        "eligibility_criteria": "Individual farmers, dairy cooperatives, self-help groups, companies, and entrepreneurs. No upper age limit",
+        "coverage_details": "Covers purchase of high-yielding milch animals (cows, buffaloes), cattle shed construction, milk storage, processing equipment, animal insurance",
+        "premium_details": "Capital subsidy: General: 33.33%, SC/ST/Women: 50%. Interest rates 4-7% (subject to government subsidies). Project cost: ₹10 lakh to ₹60 lakh per unit",
+        "application_process": "Submit project proposal through NABARD consultants or directly to NABARD district office. Need land records, project report, cost estimates, Aadhaar, PAN"
+    },
+    {
+        "id": "pkvy",
+        "name": "Paramparagat Krishi Vikas Yojana (PKVY)",
+        "category": "Input Subsidy",
+        "description": "Promotes organic farming through cluster approach. Provides financial assistance for conversion from chemical to organic farming over 3 years.",
+        "benefit_inr": "₹50,000 per hectare over 3 years (₹31,000 in year 1, ₹10,000 each in years 2&3). Additional ₹50,000 per cluster for infrastructure",
+        "eligibility_criteria": "Clusters of 50 farmers each farming minimum 50 acres. Farmers must commit to organic farming for at least 3 years",
+        "coverage_details": "Covers organic inputs (bio-fertilizers, bio-pesticides), organic certification, residue testing, capacity building, marketing support, packaging material",
+        "premium_details": "Free for participating farmers. Government provides full financial assistance. No farmer contribution required. Cluster-based implementation",
+        "application_process": "Form or join a cluster of 50 farmers through State Agriculture Department. Submit group application with land details, commitment letter, Aadhaar of all members"
+    },
+    {
+        "id": "kisan_rath",
+        "name": "Kisan Rath Mobile App",
+        "category": "Input Subsidy",
+        "description": "Digital platform connecting farmers directly with transporters to move agricultural produce efficiently at transparent rates, reducing transportation costs.",
+        "benefit_inr": "Saves 15-30% on transportation costs. Direct access to verified transporters. Transparent pricing",
+        "eligibility_criteria": "All farmers with produce to transport. Smartphone with internet connection required. Free registration",
+        "coverage_details": "Connects farmers with truck/vehicle owners. Shows real-time vehicle availability, rates. Multiple payment options. Rating system for service quality",
+        "premium_details": "Free app. No registration fee. Pay only for transportation as per negotiated rates. Government doesn't charge any commission",
+        "application_process": "Download Kisan Rath app from Google Play Store or Apple App Store. Register with mobile number and Aadhaar. Post transport requirement or search available vehicles"
+    }
 ]
 
 
@@ -141,6 +214,15 @@ Return this JSON:
 
 
 def assess_schemes(p: FarmerProfile, profile: dict) -> list:
+    schemes_info = "\n".join([
+        f"{i+1}. {s['id']} - {s['name']} ({s['category']})\n"
+        f"   Benefit: {s['benefit_inr']}\n"
+        f"   Eligibility: {s['eligibility_criteria']}\n"
+        f"   Coverage: {s['coverage_details']}\n"
+        f"   Premium/Cost: {s.get('premium_details', 'N/A')}"
+        for i, s in enumerate(SCHEMES_DB)
+    ])
+
     prompt = f"""Advise {p.name} about government schemes, speaking directly to them using "you".
 
 THEIR SITUATION:
@@ -148,32 +230,44 @@ THEIR SITUATION:
 - Debt: Rs.{p.existing_debt_inr:,.0f}, Risks: {', '.join(p.risk_exposure)}
 - Financial health: {profile.get('financial_vulnerability', 'medium')} vulnerability
 
-SCHEMES (assess all 5):
-1. pmfby - PM Fasal Bima Yojana (crop insurance)
-2. kcc - Kisan Credit Card (credit up to Rs.3L at low interest)
-3. pmkisan - PM-KISAN (Rs.6,000/year straight to your bank)
-4. shc - Soil Health Card (free soil testing)
-5. pmksy - PM Krishi Sinchai Yojana (55% off irrigation equipment)
+AVAILABLE SCHEMES (assess all {len(SCHEMES_DB)}):
+{schemes_info}
 
 Use friendly direct language: "You can get this because...", "To apply, go to your local..."
 
-Return JSON with key "schemes" containing array of 5:
+For each scheme, consider:
+- Do they meet the eligibility criteria?
+- Is the benefit substantial for their situation?
+- Is it worth the effort to apply?
+- How does it address their specific risks and needs?
+
+Return JSON with key "schemes" containing array of {len(SCHEMES_DB)} items:
 {{
   "schemes": [
     {{
       "scheme_id": "<id>",
+      "name": "<full name from database>",
+      "category": "<category from database>",
+      "description": "<description from database>",
+      "benefit_inr": "<benefit from database>",
+      "eligibility_criteria": "<from database>",
+      "coverage_details": "<from database>",
+      "premium_details": "<from database if exists>",
+      "application_process": "<from database if exists>",
       "eligible": true or false,
       "suitability": "recommended or suitable or low_value or not_suitable",
       "suitability_label": "<plain label like 'Great for you' or 'Worth trying' or 'Skip for now'>",
-      "reason": "<1-2 simple sentences to {p.name}>",
-      "benefit_effort_score": <1-10>,
-      "priority": <1-5>,
+      "reason": "<1-2 simple sentences to {p.name} explaining why they should/shouldn't apply>",
+      "benefit_effort_score": <1-10 - how much benefit vs effort to apply>,
+      "priority": <1-{len(SCHEMES_DB)} - ranking based on their situation>,
       "action_required": "<one action sentence: 'Go to...' or 'Visit...' or 'Call...'>"
     }}
   ]
-}}"""
+}}
 
-    result = call_groq(prompt, max_tokens=700)
+Include ALL {len(SCHEMES_DB)} schemes in your response, even if some are not suitable."""
+
+    result = call_groq(prompt, max_tokens=1500)
     raw = result.get("schemes", result) if isinstance(result, dict) else result
     if not isinstance(raw, list):
         raw = []
@@ -182,7 +276,12 @@ Return JSON with key "schemes" containing array of 5:
     for item in raw:
         sid = item.get("scheme_id")
         if sid in scheme_map:
-            item.update({k: scheme_map[sid][k] for k in ["name", "category", "description", "benefit_inr"]})
+            # Only update fields that weren't provided by the AI
+            for key in ["name", "category", "description", "benefit_inr", "eligibility_criteria", 
+                       "coverage_details", "premium_details", "application_process"]:
+                if key not in item or not item[key]:
+                    item[key] = scheme_map[sid].get(key, "")
+    
     return sorted(raw, key=lambda x: x.get("priority", 99))
 
 
