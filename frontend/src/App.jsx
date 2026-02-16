@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 
 const API_BASE = "http://localhost:8000";
 
@@ -16,8 +16,8 @@ const T = {
   blue: "#4a8fd4",
 };
 
-const TAB_ORDER = ["profile", "snapshot", "scheme", "loan", "decisions"];
-const TAB_STEP  = { dashboard: 0, profile: 1, snapshot: 2, scheme: 3, loan: 4, decisions: 5 };
+const TAB_ORDER = ["profile", "snapshot", "scheme", "decisions"];
+const TAB_STEP  = { dashboard: 0, profile: 1, snapshot: 2, scheme: 3, decisions: 4, loan: 0 };
 
 function useFadeIn(dep) {
   const [v, setV] = useState(false);
@@ -119,31 +119,22 @@ function AnimBar({ pct, color, delay=0 }) {
   </div>;
 }
 
-// ─── Donut Chart (SVG) ─────────────────────────────────────────────────────────
 function DonutChart({ data, size=180 }) {
   const total = data.reduce((s, d) => s + (d.value || 0), 0);
   if (!total) return null;
   let cumAngle = -90;
-  const cx = size / 2, cy = size / 2, r = size * 0.36, strokeW = size * 0.18;
-
+  const cx = size/2, cy = size/2, r = size*0.36, strokeW = size*0.18;
   const slices = data.map((d) => {
-    const pct = (d.value || 0) / total;
-    const angle = pct * 360;
-    const startAngle = cumAngle;
+    const pct = (d.value||0)/total, angle = pct*360, startAngle = cumAngle;
     cumAngle += angle;
-    const endAngle = cumAngle;
-    const start = polarToXY(cx, cy, r, startAngle);
-    const end = polarToXY(cx, cy, r, endAngle);
+    const start = polarToXY(cx,cy,r,startAngle), end = polarToXY(cx,cy,r,cumAngle);
     const largeArc = angle > 180 ? 1 : 0;
-    const path = `M ${start.x} ${start.y} A ${r} ${r} 0 ${largeArc} 1 ${end.x} ${end.y}`;
-    return { ...d, path, pct };
+    return { ...d, path:`M ${start.x} ${start.y} A ${r} ${r} 0 ${largeArc} 1 ${end.x} ${end.y}`, pct };
   });
-
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-      {slices.map((s, i) => (
-        <path key={i} d={s.path} fill="none" stroke={s.color} strokeWidth={strokeW}
-          strokeLinecap="butt" style={{ transition:"stroke-dashoffset .5s" }}>
+      {slices.map((s,i) => (
+        <path key={i} d={s.path} fill="none" stroke={s.color} strokeWidth={strokeW} strokeLinecap="butt">
           <title>{s.label}: ₹{(s.value||0).toLocaleString("en-IN")} ({Math.round(s.pct*100)}%)</title>
         </path>
       ))}
@@ -155,31 +146,24 @@ function DonutChart({ data, size=180 }) {
   );
 }
 
-function polarToXY(cx, cy, r, angleDeg) {
-  const rad = (angleDeg * Math.PI) / 180;
-  return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+function polarToXY(cx,cy,r,angleDeg) {
+  const rad = (angleDeg*Math.PI)/180;
+  return { x: cx+r*Math.cos(rad), y: cy+r*Math.sin(rad) };
 }
 
-// ─── Risk Gauge (SVG arc) ─────────────────────────────────────────────────────
 function RiskGauge({ score, label, description, delay=0 }) {
   const [animated, setAnimated] = useState(false);
   useEffect(() => { const t = setTimeout(() => setAnimated(true), 300+delay); return () => clearTimeout(t); }, []);
-  const size = 100, cx = 50, cy = 54, r = 36;
-  const arcLen = Math.PI * r;
-  const filled = animated ? (score / 100) * arcLen : 0;
-  const color = score < 35 ? T.green : score < 65 ? T.amber : T.red;
-
+  const size=100, cx=50, cy=54, r=36, arcLen=Math.PI*r;
+  const filled = animated ? (score/100)*arcLen : 0;
+  const color = score<35?T.green:score<65?T.amber:T.red;
   return (
     <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:"6px" }}>
       <svg width={size} height={size*0.62} viewBox={`0 0 ${size} ${size*0.62}`}>
-        <path d={`M ${cx-r} ${cy} A ${r} ${r} 0 0 1 ${cx+r} ${cy}`}
-          fill="none" stroke={T.border} strokeWidth="10" strokeLinecap="round" />
-        <path d={`M ${cx-r} ${cy} A ${r} ${r} 0 0 1 ${cx+r} ${cy}`}
-          fill="none" stroke={color} strokeWidth="10" strokeLinecap="round"
-          strokeDasharray={`${filled} ${arcLen}`}
-          style={{ transition:"stroke-dasharray 1s cubic-bezier(.4,0,.2,1)" }} />
-        <text x={cx} y={cy-4} textAnchor="middle" fontSize="14" fontWeight="700"
-          fill={color} fontFamily="Poppins">{score}</text>
+        <path d={`M ${cx-r} ${cy} A ${r} ${r} 0 0 1 ${cx+r} ${cy}`} fill="none" stroke={T.border} strokeWidth="10" strokeLinecap="round" />
+        <path d={`M ${cx-r} ${cy} A ${r} ${r} 0 0 1 ${cx+r} ${cy}`} fill="none" stroke={color} strokeWidth="10" strokeLinecap="round"
+          strokeDasharray={`${filled} ${arcLen}`} style={{ transition:"stroke-dasharray 1s cubic-bezier(.4,0,.2,1)" }} />
+        <text x={cx} y={cy-4} textAnchor="middle" fontSize="14" fontWeight="700" fill={color} fontFamily="Poppins">{score}</text>
       </svg>
       <div style={{ fontSize:"12px", fontWeight:600, color:T.text, textAlign:"center" }}>{label}</div>
       <div style={{ fontSize:"11px", color:T.textDim, textAlign:"center", lineHeight:1.5, maxWidth:"90px" }}>{description}</div>
@@ -187,13 +171,198 @@ function RiskGauge({ score, label, description, delay=0 }) {
   );
 }
 
+// ─── Repayment Plan Modal ─────────────────────────────────────────────────────
+function RepaymentPlanModal({ profile, onClose }) {
+  const [loading, setLoading] = useState(true);
+  const [plan, setPlan] = useState(null);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    const fetchPlan = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/repayment-plan`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(profile)
+        });
+        if (!res.ok) throw new Error("Failed to generate plan");
+        const data = await res.json();
+        setPlan(data.repayment_plan);
+      } catch(e) {
+        setError(e.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchPlan();
+  }, []);
+
+  const SEASON_COLOR = { sowing: T.green, growing: T.blue, harvest: "#b8f04a", lean: T.amber };
+  const SEASON_EMOJI = { sowing: "🌱", growing: "🌿", harvest: "🌾", lean: "☀️" };
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.55)", zIndex:1000,
+      display:"flex", alignItems:"center", justifyContent:"center", padding:"20px" }}
+      onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div style={{ background:T.surface, borderRadius:"20px", width:"100%", maxWidth:"780px",
+        maxHeight:"88vh", overflow:"hidden", display:"flex", flexDirection:"column",
+        boxShadow:"0 24px 80px rgba(0,0,0,.25)" }}>
+
+        {/* Header */}
+        <div style={{ padding:"24px 28px", borderBottom:`1px solid ${T.border}`,
+          display:"flex", justifyContent:"space-between", alignItems:"center",
+          background:T.sidebar, borderRadius:"20px 20px 0 0" }}>
+          <div>
+            <div style={{ fontSize:"18px", fontWeight:700, color:"#fff" }}>📅 Your Repayment Plan</div>
+            <div style={{ fontSize:"13px", color:T.sidebarText, marginTop:"3px" }}>
+              ₹{parseFloat(profile.loan_amount_inr).toLocaleString("en-IN")} · {profile.loan_purpose}
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background:"rgba(255,255,255,.15)", border:"none",
+            borderRadius:"8px", color:"#fff", padding:"8px 14px", cursor:"pointer", fontSize:"13px" }}>
+            Close ✕
+          </button>
+        </div>
+
+        {/* Content */}
+        <div style={{ overflowY:"auto", padding:"24px 28px", flex:1 }}>
+          {loading && (
+            <div style={{ display:"flex", flexDirection:"column", alignItems:"center", padding:"50px" }}>
+              <div style={{ width:"36px", height:"36px", border:"3px solid #e0e0e0",
+                borderTop:`3px solid ${T.accent}`, borderRadius:"50%",
+                animation:"spin 1s linear infinite", marginBottom:"16px" }} />
+              <div style={{ fontSize:"14px", color:T.textMid }}>Building your plan...</div>
+            </div>
+          )}
+
+          {error && (
+            <div style={{ padding:"20px", background:T.redLight, borderRadius:"10px", color:T.red }}>
+              {error}
+            </div>
+          )}
+
+          {plan && (
+            <div>
+              {/* Summary strip */}
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:"12px", marginBottom:"20px" }}>
+                {[
+                  { label:"Monthly Payment", val:`₹${plan.monthly_emi?.toLocaleString("en-IN")}`, color:T.text },
+                  { label:"Total Months", val:`${plan.total_months} months`, color:T.accent },
+                  { label:"Est. Total Paid", val:`₹${plan.total_paid?.toLocaleString("en-IN")}`, color:T.amber },
+                ].map((m,i) => (
+                  <div key={i} style={{ background:T.surfaceAlt, borderRadius:"12px",
+                    padding:"16px", textAlign:"center", border:`1px solid ${T.border}` }}>
+                    <div style={{ fontSize:"11px", color:T.textDim, fontWeight:600, marginBottom:"6px",
+                      textTransform:"uppercase", letterSpacing:".08em" }}>{m.label}</div>
+                    <div style={{ fontSize:"20px", fontWeight:700, color:m.color }}>{m.val}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Opening advice */}
+              {plan.opening_advice && (
+                <div style={{ background:T.accentLight, borderRadius:"12px", padding:"16px 20px",
+                  border:`1.5px solid ${T.accent}30`, marginBottom:"20px" }}>
+                  <div style={{ fontSize:"11px", fontWeight:700, color:T.accent, marginBottom:"6px",
+                    textTransform:"uppercase", letterSpacing:".1em" }}>💬 A note for you</div>
+                  <p style={{ fontSize:"14px", color:T.text, lineHeight:1.8, margin:0 }}>{plan.opening_advice}</p>
+                </div>
+              )}
+
+              {/* Monthly breakdown */}
+              {plan.monthly_breakdown && (
+                <div style={{ marginBottom:"20px" }}>
+                  <div style={{ fontSize:"11px", fontWeight:700, color:T.textDim, letterSpacing:".14em",
+                    textTransform:"uppercase", marginBottom:"12px" }}>Month-by-Month Plan</div>
+                  <div style={{ display:"grid", gap:"8px" }}>
+                    {plan.monthly_breakdown.map((m, i) => {
+                      const sc = SEASON_COLOR[m.season] || T.textDim;
+                      const se = SEASON_EMOJI[m.season] || "📆";
+                      return (
+                        <div key={i} style={{ display:"flex", alignItems:"center", gap:"14px",
+                          padding:"12px 16px", background:T.surfaceAlt, borderRadius:"10px",
+                          border:`1px solid ${T.border}`, transition:"all .15s" }}>
+                          <div style={{ width:"36px", height:"36px", borderRadius:"50%", flexShrink:0,
+                            background:`${sc}18`, border:`2px solid ${sc}40`,
+                            display:"flex", alignItems:"center", justifyContent:"center",
+                            fontSize:"13px", fontWeight:700, color:sc }}>
+                            {m.month}
+                          </div>
+                          <div style={{ flex:1 }}>
+                            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"3px" }}>
+                              <span style={{ fontSize:"11px", color:sc, fontWeight:600 }}>
+                                {se} {m.season ? m.season.charAt(0).toUpperCase() + m.season.slice(1) : ""}
+                              </span>
+                              <span style={{ fontSize:"13px", fontWeight:700, color:T.text }}>
+                                ₹{(m.emi_due||plan.monthly_emi).toLocaleString("en-IN")}
+                              </span>
+                            </div>
+                            <div style={{ fontSize:"12px", color:T.textMid, lineHeight:1.5 }}>{m.tip}</div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Strategies */}
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"12px", marginBottom:"16px" }}>
+                {plan.harvest_strategy && (
+                  <div style={{ background:T.greenLight, borderRadius:"12px", padding:"16px 18px",
+                    border:`1px solid #c0e8d0` }}>
+                    <div style={{ fontSize:"11px", fontWeight:700, color:T.green, marginBottom:"8px" }}>🌾 HARVEST SEASON TIP</div>
+                    <p style={{ fontSize:"13px", color:T.text, lineHeight:1.7, margin:0 }}>{plan.harvest_strategy}</p>
+                  </div>
+                )}
+                {plan.lean_season_strategy && (
+                  <div style={{ background:T.amberLight, borderRadius:"12px", padding:"16px 18px",
+                    border:`1px solid #f0d8b8` }}>
+                    <div style={{ fontSize:"11px", fontWeight:700, color:T.amber, marginBottom:"8px" }}>☀️ LEAN SEASON TIP</div>
+                    <p style={{ fontSize:"13px", color:T.text, lineHeight:1.7, margin:0 }}>{plan.lean_season_strategy}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Extra tips */}
+              <div style={{ display:"grid", gap:"10px" }}>
+                {plan.early_payoff_tip && (
+                  <div style={{ display:"flex", gap:"12px", padding:"14px 16px",
+                    background:T.surfaceAlt, borderRadius:"10px", border:`1px solid ${T.border}` }}>
+                    <span style={{ fontSize:"18px" }}>💡</span>
+                    <div>
+                      <div style={{ fontSize:"11px", fontWeight:700, color:T.textDim, marginBottom:"4px" }}>PAY A LITTLE EXTRA</div>
+                      <div style={{ fontSize:"13px", color:T.text }}>{plan.early_payoff_tip}</div>
+                    </div>
+                  </div>
+                )}
+                {plan.emergency_advice && (
+                  <div style={{ display:"flex", gap:"12px", padding:"14px 16px",
+                    background:T.redLight, borderRadius:"10px", border:`1px solid #f0c8c0` }}>
+                    <span style={{ fontSize:"18px" }}>🆘</span>
+                    <div>
+                      <div style={{ fontSize:"11px", fontWeight:700, color:T.red, marginBottom:"4px" }}>IF YOU MISS A PAYMENT</div>
+                      <div style={{ fontSize:"13px", color:T.text }}>{plan.emergency_advice}</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
 const NAV_MAIN = [
-  {id:"dashboard",label:"Dashboard"},
-  {id:"profile",label:"Profile Analysis"},
-  {id:"scheme",label:"Scheme"},
-  {id:"loan",label:"Loan"},
-  {id:"decisions",label:"Decisions"},
+  {id:"dashboard", label:"Dashboard"},
+  {id:"profile", label:"Profile Analysis"},
+  {id:"snapshot", label:"Snapshot"},
+  {id:"scheme", label:"Schemes"},
+  {id:"decisions", label:"Decisions"},
+  {id:"loan", label:"Loan Assessment"},
 ];
 
 function NavItem({ label, active, enabled, onClick }) {
@@ -212,7 +381,7 @@ function NavItem({ label, active, enabled, onClick }) {
 }
 
 function Sidebar({ active, onNav, hasResults }) {
-  const can = (id) => ["profile","dashboard"].includes(id) || hasResults;
+  const can = (id) => ["dashboard","profile","loan"].includes(id) ? true : hasResults;
   return (
     <div style={{ width:"240px", minHeight:"100vh", background:T.sidebar, flexShrink:0,
       display:"flex", flexDirection:"column", padding:"24px 0",
@@ -236,9 +405,7 @@ function Sidebar({ active, onNav, hasResults }) {
   );
 }
 
-// ─── Step Bar ─────────────────────────────────────────────────────────────────
-const STEPS = ["Profile","Snapshot","Schemes","Loan","Decision"];
-
+const STEPS = ["Profile","Snapshot","Schemes","Decision"];
 function StepBar({ current }) {
   return (
     <div style={{ display:"flex", alignItems:"center", justifyContent:"center", marginBottom:"40px" }}>
@@ -246,8 +413,7 @@ function StepBar({ current }) {
         const idx = i+1, done = idx < current, active = idx === current;
         return (
           <div key={idx} style={{ display:"flex", alignItems:"center" }}>
-            {i > 0 && <div style={{ width:"80px", height:"2px",
-              background:done?T.accent:T.border, transition:"background .4s" }} />}
+            {i > 0 && <div style={{ width:"80px", height:"2px", background:done?T.accent:T.border, transition:"background .4s" }} />}
             <div style={{ width:"40px", height:"40px", borderRadius:"50%",
               background:active?T.sidebarActive:done?T.accent:"#2d4a40",
               color:active?T.sidebarActiveText:"#fff",
@@ -265,23 +431,15 @@ function StepBar({ current }) {
   );
 }
 
-// ─── Next / Back nav ──────────────────────────────────────────────────────────
-function NavButtons({ tab, onNav, hasResults, loading }) {
+function NavButtons({ tab, onNav, hasResults }) {
   const idx = TAB_ORDER.indexOf(tab);
   const prev = idx > 0 ? TAB_ORDER[idx-1] : null;
   const next = idx < TAB_ORDER.length-1 ? TAB_ORDER[idx+1] : null;
-  const canNext = next && (next==="snapshot" ? hasResults : hasResults);
-
-  if (tab === "profile") return null; // profile has its own submit button
-
+  if (tab === "profile" || tab === "loan") return null;
   return (
     <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginTop:"28px" }}>
-      {prev ? (
-        <Btn variant="ghost" onClick={() => onNav(prev)}>← Back</Btn>
-      ) : <div />}
-      {next && canNext && (
-        <Btn onClick={() => onNav(next)}>Continue to {STEPS[TAB_ORDER.indexOf(next)]} →</Btn>
-      )}
+      {prev ? <Btn variant="ghost" onClick={() => onNav(prev)}>← Back</Btn> : <div />}
+      {next && hasResults && <Btn onClick={() => onNav(next)}>Continue to {STEPS[TAB_ORDER.indexOf(next)]} →</Btn>}
     </div>
   );
 }
@@ -295,7 +453,7 @@ function Btn({ children, onClick, variant="primary", disabled=false }) {
       style={{ padding:"12px 28px",
         background:isPrimary?(h?"#1a2e24":T.sidebar):"transparent",
         color:isPrimary?"#fff":(h?T.text:T.textMid),
-        border:isPrimary?"none":`1.5px solid ${h?T.border:T.border}`,
+        border:isPrimary?"none":`1.5px solid ${T.border}`,
         borderRadius:"10px", fontSize:"14px", fontWeight:600,
         cursor:"pointer", transition:"all .2s",
         boxShadow:isPrimary&&h?`0 6px 20px ${T.sidebar}50`:"none",
@@ -315,7 +473,7 @@ function ProfileTab({ onSubmit, loading }) {
   const [form, setForm] = useState({
     name:"", state:"Maharashtra", land_acres:"", crop_type:"Soybean",
     income_type:"seasonal", monthly_income_inr:"", household_size:"",
-    existing_debt_inr:"", risk_exposure:["drought"], loan_purpose:"", loan_amount_inr:"",
+    existing_debt_inr:"", risk_exposure:["drought"],
   });
   const set = (k,v) => setForm(f => ({...f,[k]:v}));
   const toggleRisk = (r) => {
@@ -328,53 +486,40 @@ function ProfileTab({ onSubmit, loading }) {
   const handleSubmit = () => {
     if (!form.name||!form.land_acres||!form.monthly_income_inr||!form.household_size) { alert("Please fill required fields"); return; }
     onSubmit({ ...form, land_acres:parseFloat(form.land_acres), monthly_income_inr:parseFloat(form.monthly_income_inr),
-      household_size:parseInt(form.household_size), existing_debt_inr:parseFloat(form.existing_debt_inr||0),
-      loan_amount_inr:form.loan_amount_inr?parseFloat(form.loan_amount_inr):null });
+      household_size:parseInt(form.household_size), existing_debt_inr:parseFloat(form.existing_debt_inr||0) });
   };
 
   return (
     <div style={{ width:"100%" }}>
       <div style={{ marginBottom:"32px" }}>
-        <h2 style={{ fontSize:"28px", fontWeight:600, color:T.text, margin:"0 0 10px", letterSpacing:"-.02em" }}>Tell us about your situation</h2>
-        <p style={{ fontSize:"14px", color:T.textMid, lineHeight:1.7 }}>All fields stay on your device. We use this to assess what financial support actually makes sense for you.</p>
+        <h2 style={{ fontSize:"28px", fontWeight:600, color:T.text, margin:"0 0 10px", letterSpacing:"-.02em" }}>Tell us about yourself</h2>
+        <p style={{ fontSize:"14px", color:T.textMid, lineHeight:1.7 }}>Your information stays on your device. We use it to find the best financial support for you.</p>
       </div>
-
       <SectionCard title="Basic Information">
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"20px" }}>
-          <div><FieldLabel required>Full Name</FieldLabel><TextInput placeholder="e.g. Ramesh Patil" value={form.name} onChange={e=>set("name",e.target.value)} /></div>
-          <div><FieldLabel required>State</FieldLabel><SelectInput value={form.state} onChange={e=>set("state",e.target.value)}>{STATES.map(s=><option key={s}>{s}</option>)}</SelectInput></div>
-          <div><FieldLabel required>Land Holding (acres)</FieldLabel><TextInput placeholder="e.g. 2.5" type="number" value={form.land_acres} onChange={e=>set("land_acres",e.target.value)} /></div>
-          <div><FieldLabel required>Primary Crop</FieldLabel><SelectInput value={form.crop_type} onChange={e=>set("crop_type",e.target.value)}>{CROP_TYPES.map(c=><option key={c}>{c}</option>)}</SelectInput></div>
-          <div><FieldLabel required>Household Size</FieldLabel><TextInput placeholder="e.g. 5" type="number" value={form.household_size} onChange={e=>set("household_size",e.target.value)} /></div>
+          <div><FieldLabel required>Your Name</FieldLabel><TextInput placeholder="e.g. Ramesh Patil" value={form.name} onChange={e=>set("name",e.target.value)} /></div>
+          <div><FieldLabel required>Your State</FieldLabel><SelectInput value={form.state} onChange={e=>set("state",e.target.value)}>{STATES.map(s=><option key={s}>{s}</option>)}</SelectInput></div>
+          <div><FieldLabel required>Land You Own (acres)</FieldLabel><TextInput placeholder="e.g. 2.5" type="number" value={form.land_acres} onChange={e=>set("land_acres",e.target.value)} /></div>
+          <div><FieldLabel required>Main Crop You Grow</FieldLabel><SelectInput value={form.crop_type} onChange={e=>set("crop_type",e.target.value)}>{CROP_TYPES.map(c=><option key={c}>{c}</option>)}</SelectInput></div>
+          <div><FieldLabel required>People in Your Family</FieldLabel><TextInput placeholder="e.g. 5" type="number" value={form.household_size} onChange={e=>set("household_size",e.target.value)} /></div>
         </div>
       </SectionCard>
-
-      <SectionCard title="Income & Debt">
+      <SectionCard title="Your Income & Debts">
         <div style={{ marginBottom:"20px" }}>
-          <FieldLabel required>Income Pattern</FieldLabel>
+          <FieldLabel required>How Do You Earn?</FieldLabel>
           <div style={{ display:"flex", gap:"12px" }}>{INCOME_TYPES.map(t=><PillToggle key={t} label={t} active={form.income_type===t.toLowerCase()} onClick={()=>set("income_type",t.toLowerCase())} />)}</div>
         </div>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"20px" }}>
           <div><FieldLabel required>Monthly Income (₹)</FieldLabel><TextInput placeholder="e.g. 15000" type="number" value={form.monthly_income_inr} onChange={e=>set("monthly_income_inr",e.target.value)} /></div>
-          <div><FieldLabel>Existing Debt (₹)</FieldLabel><TextInput placeholder="e.g. 25000" type="number" value={form.existing_debt_inr} onChange={e=>set("existing_debt_inr",e.target.value)} /></div>
+          <div><FieldLabel>Current Debt (₹)</FieldLabel><TextInput placeholder="e.g. 25000 (0 if none)" type="number" value={form.existing_debt_inr} onChange={e=>set("existing_debt_inr",e.target.value)} /></div>
         </div>
       </SectionCard>
-
-      <SectionCard title="Risk Exposure">
-        <p style={{ fontSize:"13px", color:T.textMid, marginBottom:"14px" }}>Select all risks that apply.</p>
+      <SectionCard title="Risks You Face">
+        <p style={{ fontSize:"13px", color:T.textMid, marginBottom:"14px" }}>Select everything that could affect your income.</p>
         <div style={{ display:"flex", flexWrap:"wrap", gap:"10px" }}>
           {RISK_OPTIONS.map(r=><RiskChip key={r} label={r} active={isRisk(r)} onClick={()=>toggleRisk(r)} />)}
         </div>
       </SectionCard>
-
-      <SectionCard title="Loan Request (Optional)">
-        <p style={{ fontSize:"13px", color:T.textMid, marginBottom:"14px" }}>If you're considering a loan, fill this in for a suitability assessment.</p>
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"20px" }}>
-          <div><FieldLabel>Loan Purpose</FieldLabel><TextInput placeholder="e.g. Seeds and fertiliser" value={form.loan_purpose} onChange={e=>set("loan_purpose",e.target.value)} /></div>
-          <div><FieldLabel>Amount Needed (₹)</FieldLabel><TextInput placeholder="e.g. 50000" type="number" value={form.loan_amount_inr} onChange={e=>set("loan_amount_inr",e.target.value)} /></div>
-        </div>
-      </SectionCard>
-
       <button onClick={handleSubmit} disabled={loading}
         onMouseEnter={()=>setH(true)} onMouseLeave={()=>setH(false)}
         style={{ width:"100%", padding:"16px 24px",
@@ -385,13 +530,13 @@ function ProfileTab({ onSubmit, loading }) {
           transition:"all .2s",
           boxShadow:h&&!loading?`0 6px 24px ${T.sidebar}60`:"0 2px 8px rgba(0,0,0,.1)",
           transform:h&&!loading?"translateY(-2px)":"translateY(0)" }}>
-        {loading ? (<><span style={{ width:"16px", height:"16px", border:"2px solid #ffffff40", borderTop:"2px solid #fff", borderRadius:"50%", display:"inline-block", animation:"spin .8s linear infinite" }} />Analysing with Gemini...</>) : "Run AI powered Analysis ⟶"}
+        {loading ? (<><span style={{ width:"16px", height:"16px", border:"2px solid #ffffff40", borderTop:"2px solid #fff", borderRadius:"50%", display:"inline-block", animation:"spin .8s linear infinite" }} />Analysing your situation...</>) : "See My Financial Analysis →"}
       </button>
     </div>
   );
 }
 
-// ─── Snapshot Tab (with charts) ────────────────────────────────────────────────
+// ─── Snapshot Tab ────────────────────────────────────────────────────────────
 function MetricRow({ label, value }) {
   return (
     <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center",
@@ -414,25 +559,21 @@ function SnapshotTab({ data, farmerName, onNav }) {
   return (
     <div style={{ opacity:visible?1:0, transform:visible?"none":"translateY(10px)", transition:"all .35s ease" }}>
       <div style={{ marginBottom:"28px" }}>
-        <h2 style={{ fontSize:"28px", fontWeight:600, color:T.text, margin:"0 0 6px", letterSpacing:"-.02em" }}>Financial Snapshot</h2>
-        <p style={{ fontSize:"14px", color:T.textMid }}>{farmerName}'s financial profile</p>
+        <h2 style={{ fontSize:"28px", fontWeight:600, color:T.text, margin:"0 0 6px", letterSpacing:"-.02em" }}>Your Financial Picture</h2>
+        <p style={{ fontSize:"14px", color:T.textMid }}>Here's what we found about {farmerName}'s finances</p>
       </div>
-
-      {/* Row 1: metrics + donut */}
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"16px", marginBottom:"0" }}>
-        <SectionCard title="Profile Metrics">
-          <MetricRow label="Income Pattern" value={<StatusBadge label={p.income_pattern} level="medium" />} />
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"16px" }}>
+        <SectionCard title="Your Profile">
+          <MetricRow label="How You Earn" value={<StatusBadge label={p.income_pattern} level="medium" />} />
           <MetricRow label="Income Stability" value={<StatusBadge label={p.income_stability} level={p.income_stability} />} />
-          <MetricRow label="Debt Load" value={<StatusBadge label={p.debt_load} level={p.debt_load} />} />
-          <MetricRow label="Financial Vulnerability" value={<StatusBadge label={p.financial_vulnerability} level={p.financial_vulnerability} />} />
-          <MetricRow label="Est. Monthly Surplus" value={
+          <MetricRow label="Debt Level" value={<StatusBadge label={p.debt_load} level={p.debt_load} />} />
+          <MetricRow label="Financial Risk" value={<StatusBadge label={p.financial_vulnerability} level={p.financial_vulnerability} />} />
+          <MetricRow label="Money Left Each Month" value={
             <span style={{ fontSize:"14px", fontWeight:700, color:p.monthly_surplus_estimate_inr>0?T.green:T.red }}>
               ₹{(p.monthly_surplus_estimate_inr||0).toLocaleString("en-IN")}
             </span>} />
         </SectionCard>
-
-        {/* Expense Donut */}
-        <SectionCard title="Monthly Expense Breakdown">
+        <SectionCard title="Where Your Money Goes">
           {expBreakdown.length > 0 ? (
             <div style={{ display:"flex", alignItems:"center", gap:"24px" }}>
               <DonutChart data={expBreakdown} size={160} />
@@ -442,7 +583,7 @@ function SnapshotTab({ data, farmerName, onNav }) {
                     <div style={{ width:"10px", height:"10px", borderRadius:"50%", background:d.color, flexShrink:0 }} />
                     <div style={{ flex:1 }}>
                       <div style={{ fontSize:"12px", fontWeight:600, color:T.text }}>{d.label}</div>
-                      <div style={{ fontSize:"11px", color:T.textDim }}>₹{(d.value||0).toLocaleString("en-IN")}/mo</div>
+                      <div style={{ fontSize:"11px", color:T.textDim }}>₹{(d.value||0).toLocaleString("en-IN")}/month</div>
                     </div>
                   </div>
                 ))}
@@ -451,10 +592,8 @@ function SnapshotTab({ data, farmerName, onNav }) {
           ) : <div style={{ color:T.textDim, fontSize:"13px" }}>No breakdown data</div>}
         </SectionCard>
       </div>
-
-      {/* Row 2: Risk gauges */}
       {riskScores.length > 0 && (
-        <SectionCard title="Risk Assessment" style={{ marginTop:"0" }}>
+        <SectionCard title="Your Risk Levels">
           <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:"8px" }}>
             {riskScores.map((r,i) => (
               <div key={i} style={{ background:T.surfaceAlt, borderRadius:"12px", padding:"16px 12px",
@@ -465,36 +604,33 @@ function SnapshotTab({ data, farmerName, onNav }) {
           </div>
         </SectionCard>
       )}
-
-      {/* Row 3: Income vs Expense bar + summary */}
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"16px" }}>
-        <SectionCard title="Income vs Expenses">
+        <SectionCard title="Income vs Spending">
           {ive.income ? (
             <div style={{ display:"grid", gap:"14px" }}>
               {[
                 { label:"Monthly Income", val:ive.income, color:T.green, max:ive.income },
-                { label:"Total Expenses", val:ive.expenses, color:T.amber, max:ive.income },
-                { label:"Surplus", val:Math.max(0,ive.surplus||0), color:T.blue, max:ive.income },
+                { label:"Total Spending", val:ive.expenses, color:T.amber, max:ive.income },
+                { label:"Money Left Over", val:Math.max(0,ive.surplus||0), color:T.blue, max:ive.income },
               ].map((row,i) => (
                 <div key={i}>
                   <div style={{ display:"flex", justifyContent:"space-between", marginBottom:"6px" }}>
                     <span style={{ fontSize:"13px", color:T.textMid }}>{row.label}</span>
                     <span style={{ fontSize:"13px", fontWeight:700, color:row.color }}>₹{(row.val||0).toLocaleString("en-IN")}</span>
                   </div>
-                  <AnimBar pct={Math.min(100, ((row.val||0)/row.max)*100)} color={row.color} delay={i*150} />
+                  <AnimBar pct={Math.min(100,((row.val||0)/row.max)*100)} color={row.color} delay={i*150} />
                 </div>
               ))}
             </div>
           ) : <div style={{ color:T.textDim, fontSize:"13px" }}>No data</div>}
         </SectionCard>
-
         <div style={{ display:"grid", gap:"16px", alignContent:"start" }}>
           <SectionCard title="Summary">
             <p style={{ fontSize:"14px", color:T.textMid, lineHeight:1.85 }}>{p.profile_summary}</p>
           </SectionCard>
-          <SectionCard title="Data Confidence">
+          <SectionCard title="How Sure Are We?">
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"10px" }}>
-              <span style={{ fontSize:"13px", color:T.textMid }}>Assessment quality</span>
+              <span style={{ fontSize:"13px", color:T.textMid }}>Confidence</span>
               <StatusBadge label={p.confidence} level={p.confidence==="high"?"stable":p.confidence==="medium"?"moderate":"high"} />
             </div>
             <AnimBar pct={confPct} color={confColor} />
@@ -502,10 +638,8 @@ function SnapshotTab({ data, farmerName, onNav }) {
           </SectionCard>
         </div>
       </div>
-
-      {/* Key risks row */}
       {(p.key_financial_risks||[]).length > 0 && (
-        <SectionCard title="Key Financial Risks">
+        <SectionCard title="Things to Watch Out For">
           <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:"10px" }}>
             {(p.key_financial_risks||[]).map((r,i) => (
               <div key={i} style={{ display:"flex", alignItems:"center", gap:"10px",
@@ -517,7 +651,6 @@ function SnapshotTab({ data, farmerName, onNav }) {
           </div>
         </SectionCard>
       )}
-
       <NavButtons tab="snapshot" onNav={onNav} hasResults={true} />
     </div>
   );
@@ -551,7 +684,7 @@ function SchemeCard({ scheme:s, isSelected, onClick }) {
       <div style={{ fontSize:"12px", color:T.textDim, marginBottom:"12px" }}>{s.category}</div>
       <div>
         <div style={{ display:"flex", justifyContent:"space-between", fontSize:"11px", color:T.textDim, marginBottom:"5px" }}>
-          <span>Benefit / Effort</span><span style={{ color:c.text, fontWeight:700 }}>{s.benefit_effort_score}/10</span>
+          <span>Worth the effort?</span><span style={{ color:c.text, fontWeight:700 }}>{s.benefit_effort_score}/10</span>
         </div>
         <div style={{ background:T.border, borderRadius:"4px", height:"6px" }}>
           <div style={{ height:"100%", width:`${(s.benefit_effort_score||0)*10}%`, background:c.text, borderRadius:"4px" }} />
@@ -565,13 +698,11 @@ function SchemesTab({ schemes, onNav }) {
   const [sel, setSel] = useState(null);
   const visible = useFadeIn("schemes");
   const s = sel!==null ? schemes[sel] : null;
-  const c = s ? (SUIT_C[s.suitability]||SUIT_C.suitable) : null;
-
   return (
     <div style={{ opacity:visible?1:0, transform:visible?"none":"translateY(10px)", transition:"all .35s ease" }}>
       <div style={{ marginBottom:"28px" }}>
-        <h2 style={{ fontSize:"28px", fontWeight:600, color:T.text, margin:"0 0 6px", letterSpacing:"-.02em" }}>Scheme Recommendations</h2>
-        <p style={{ fontSize:"14px", color:T.textMid }}>Assessed for your situation — not just eligibility, but whether it's worth pursuing.</p>
+        <h2 style={{ fontSize:"28px", fontWeight:600, color:T.text, margin:"0 0 6px", letterSpacing:"-.02em" }}>Government Help Available for You</h2>
+        <p style={{ fontSize:"14px", color:T.textMid }}>We checked which schemes make sense for your situation — not just if you qualify, but if they're actually worth your time.</p>
       </div>
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"16px" }}>
         <div style={{ display:"grid", gap:"10px", alignContent:"start" }}>
@@ -588,21 +719,18 @@ function SchemesTab({ schemes, onNav }) {
                 <span style={{ padding:"4px 12px", borderRadius:"12px", fontSize:"12px", fontWeight:600,
                   background:s.eligible?T.greenLight:T.redLight, color:s.eligible?T.green:T.red,
                   border:`1px solid ${s.eligible?"#c0e8d0":"#f0c8c0"}` }}>
-                  {s.eligible?"✓ Eligible":"✕ Not Eligible"}
+                  {s.eligible?"✓ You Qualify":"✕ You Don't Qualify"}
                 </span>
               </div>
               <div style={{ borderTop:`1px solid ${T.border}`, paddingTop:"16px", display:"grid", gap:"14px" }}>
-                <div>
-                  <div style={{ fontSize:"11px", fontWeight:700, color:T.textDim, textTransform:"uppercase", letterSpacing:".1em", marginBottom:"8px" }}>Suitability Reasoning</div>
-                  <p style={{ fontSize:"13px", color:T.textMid, lineHeight:1.75 }}>{s.reason}</p>
-                </div>
+                <p style={{ fontSize:"13px", color:T.textMid, lineHeight:1.75 }}>{s.reason}</p>
                 <div style={{ background:T.accentLight, borderRadius:"10px", padding:"14px 18px" }}>
-                  <div style={{ fontSize:"11px", color:T.accent, fontWeight:700, marginBottom:"4px" }}>BENEFIT</div>
+                  <div style={{ fontSize:"11px", color:T.accent, fontWeight:700, marginBottom:"4px" }}>WHAT YOU GET</div>
                   <div style={{ fontSize:"14px", color:T.text, fontWeight:600 }}>{s.benefit_inr}</div>
                 </div>
                 {s.action_required && (
                   <div style={{ background:T.greenLight, borderRadius:"10px", padding:"14px 18px", border:`1px solid #c0e8d0` }}>
-                    <div style={{ fontSize:"11px", color:T.green, fontWeight:700, marginBottom:"4px" }}>NEXT ACTION</div>
+                    <div style={{ fontSize:"11px", color:T.green, fontWeight:700, marginBottom:"4px" }}>WHAT YOU SHOULD DO</div>
                     <div style={{ fontSize:"13px", color:T.textMid }}>{s.action_required}</div>
                   </div>
                 )}
@@ -613,7 +741,7 @@ function SchemesTab({ schemes, onNav }) {
               border:`1.5px dashed ${T.border}`, borderRadius:"14px" }}>
               <div style={{ textAlign:"center" }}>
                 <div style={{ fontSize:"32px", marginBottom:"10px", color:T.textDim }}>←</div>
-                <div style={{ fontSize:"13px", color:T.textDim }}>Select a scheme for details</div>
+                <div style={{ fontSize:"13px", color:T.textDim }}>Tap a scheme to see details</div>
               </div>
             </div>
           )}
@@ -625,66 +753,278 @@ function SchemesTab({ schemes, onNav }) {
 }
 
 // ─── Loan Tab ─────────────────────────────────────────────────────────────────
-function LoanTab({ loan, onNav }) {
+function LoanTab() {
   const visible = useFadeIn("loan");
-  if (!loan.assessed) return (
-    <div style={{ opacity:visible?1:0, transition:"all .35s" }}>
-      <h2 style={{ fontSize:"28px", fontWeight:600, color:T.text, margin:"0 0 28px", letterSpacing:"-.02em" }}>Loan Assessment</h2>
-      <SectionCard><div style={{ textAlign:"center", padding:"40px" }}>
-        <div style={{ fontSize:"48px", marginBottom:"16px" }}>—</div>
-        <div style={{ fontSize:"16px", color:T.textMid, marginBottom:"8px" }}>No Loan Request Provided</div>
-        <p style={{ fontSize:"13px", color:T.textDim }}>{loan.message}</p>
-      </div></SectionCard>
-      <NavButtons tab="loan" onNav={onNav} hasResults={true} />
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
+  const [formSnapshot, setFormSnapshot] = useState(null);
+  const [error, setError] = useState(null);
+  const [showRepayment, setShowRepayment] = useState(false);
+
+  const [form, setForm] = useState({
+    name:"", state:"Maharashtra", land_acres:"", crop_type:"Soybean",
+    income_type:"seasonal", monthly_income_inr:"", household_size:"",
+    existing_debt_inr:"", risk_exposure:["drought"],
+    loan_purpose:"", loan_amount_inr:""
+  });
+  const set = (k,v) => setForm(f => ({...f,[k]:v}));
+  const toggleRisk = (r) => {
+    const key = r.toLowerCase().replace(" ","_");
+    set("risk_exposure", form.risk_exposure.includes(key) ? form.risk_exposure.filter(x=>x!==key) : [...form.risk_exposure,key]);
+  };
+  const isRisk = (r) => form.risk_exposure.includes(r.toLowerCase().replace(" ","_"));
+
+  const handleAssess = async () => {
+    if (!form.name||!form.land_acres||!form.monthly_income_inr||!form.household_size||!form.loan_purpose||!form.loan_amount_inr) {
+      alert("Please fill all fields"); return;
+    }
+    setLoading(true); setError(null);
+    try {
+      const payload = {
+        name: form.name, state: form.state,
+        land_acres: parseFloat(form.land_acres), crop_type: form.crop_type,
+        income_type: form.income_type, monthly_income_inr: parseFloat(form.monthly_income_inr),
+        household_size: parseInt(form.household_size), existing_debt_inr: parseFloat(form.existing_debt_inr||0),
+        risk_exposure: form.risk_exposure, loan_purpose: form.loan_purpose,
+        loan_amount_inr: parseFloat(form.loan_amount_inr),
+      };
+      const res = await fetch(`${API_BASE}/assess-loan`, { method:"POST",
+        headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload) });
+      if (!res.ok) throw new Error("Assessment failed");
+      const data = await res.json();
+      setResult(data.loan_assessment);
+      setFormSnapshot(payload);
+    } catch(e) { setError(e.message); } finally { setLoading(false); }
+  };
+
+  if (loading) return (
+    <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"80px" }}>
+      <div style={{ width:"44px", height:"44px", border:"3px solid #e0e0e0", borderTop:`3px solid ${T.accent}`,
+        borderRadius:"50%", animation:"spin 1s linear infinite", marginBottom:"20px" }} />
+      <div style={{ fontSize:"15px", color:T.textMid, fontWeight:500 }}>Checking your loan...</div>
+      <div style={{ fontSize:"13px", color:T.textDim, marginTop:"6px" }}>Usually takes 3-5 seconds</div>
     </div>
   );
 
-  const cfg = {
-    suitable:{ bg:T.greenLight, border:"#c0e8d0", color:T.green, icon:"✓" },
-    risky:{ bg:T.amberLight, border:"#f0d8b8", color:T.amber, icon:"⚠" },
-    not_recommended:{ bg:T.redLight, border:"#f0c8c0", color:T.red, icon:"✕" },
-  }[loan.label] || { bg:T.amberLight, border:"#f0d8b8", color:T.amber, icon:"⚠" };
+  if (result) {
+    const loan = result;
+    const cfg = {
+      suitable:{ bg:T.greenLight, border:"#c0e8d0", color:T.green, icon:"✓", word:"Good News" },
+      risky:{ bg:T.amberLight, border:"#f0d8b8", color:T.amber, icon:"⚠", word:"Be Careful" },
+      not_recommended:{ bg:T.redLight, border:"#f0c8c0", color:T.red, icon:"✕", word:"Think Again" },
+    }[loan.label] || { bg:T.amberLight, border:"#f0d8b8", color:T.amber, icon:"⚠", word:"Be Careful" };
 
-  return (
-    <div style={{ opacity:visible?1:0, transform:visible?"none":"translateY(10px)", transition:"all .35s ease" }}>
-      <div style={{ marginBottom:"28px" }}>
-        <h2 style={{ fontSize:"28px", fontWeight:600, color:T.text, margin:"0 0 6px", letterSpacing:"-.02em" }}>Loan Assessment</h2>
-        <p style={{ fontSize:"14px", color:T.textMid }}>Based on your income cycle — not bank approval probability.</p>
-      </div>
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"16px" }}>
-        <div style={{ display:"grid", gap:"16px", alignContent:"start" }}>
-          <div style={{ background:cfg.bg, border:`1.5px solid ${cfg.border}`, borderRadius:"14px", padding:"24px 28px" }}>
-            <div style={{ display:"flex", alignItems:"center", gap:"18px" }}>
-              <div style={{ width:"56px", height:"56px", borderRadius:"50%", background:`${cfg.color}20`, border:`2px solid ${cfg.color}`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:"22px", color:cfg.color, flexShrink:0 }}>{cfg.icon}</div>
-              <div>
-                <div style={{ fontSize:"12px", color:T.textDim, fontWeight:600, textTransform:"uppercase", letterSpacing:".1em" }}>Loan Suitability</div>
-                <div style={{ fontSize:"22px", fontWeight:700, color:cfg.color }}>{loan.label_display}</div>
-              </div>
+    return (
+      <div style={{ opacity:visible?1:0, transition:"opacity .35s ease" }}>
+        {showRepayment && formSnapshot && (
+          <RepaymentPlanModal profile={formSnapshot} onClose={() => setShowRepayment(false)} />
+        )}
+
+        <div style={{ marginBottom:"24px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+          <div>
+            <h2 style={{ fontSize:"28px", fontWeight:600, color:T.text, margin:"0 0 4px" }}>Your Loan Check</h2>
+            <p style={{ fontSize:"14px", color:T.textMid }}>₹{parseFloat(form.loan_amount_inr).toLocaleString("en-IN")} · {form.loan_purpose}</p>
+          </div>
+          <Btn variant="ghost" onClick={() => setResult(null)}>Check Another Loan</Btn>
+        </div>
+
+        {/* Big verdict */}
+        <div style={{ background:cfg.bg, border:`2px solid ${cfg.border}`, borderRadius:"16px",
+          padding:"28px 32px", marginBottom:"20px" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:"20px" }}>
+            <div style={{ width:"72px", height:"72px", borderRadius:"50%", background:`${cfg.color}20`,
+              border:`3px solid ${cfg.color}`, display:"flex", alignItems:"center", justifyContent:"center",
+              fontSize:"32px", color:cfg.color, flexShrink:0 }}>{cfg.icon}</div>
+            <div>
+              <div style={{ fontSize:"12px", color:T.textDim, fontWeight:700, textTransform:"uppercase",
+                letterSpacing:".12em", marginBottom:"4px" }}>{cfg.word}</div>
+              <div style={{ fontSize:"24px", fontWeight:700, color:cfg.color, marginBottom:"10px" }}>{loan.label_display}</div>
+              <p style={{ fontSize:"15px", color:T.text, lineHeight:1.8, margin:0 }}>{loan.overall_reasoning}</p>
             </div>
           </div>
-          <SectionCard title="Assessment"><p style={{ fontSize:"14px", color:T.textMid, lineHeight:1.8 }}>{loan.reasoning}</p></SectionCard>
-          {loan.emi_concern && (
-            <div style={{ background:T.amberLight, border:`1px solid #f0d8b8`, borderRadius:"12px", padding:"18px 20px" }}>
-              <div style={{ display:"flex", gap:"12px" }}>
-                <span style={{ color:T.amber, fontSize:"18px" }}>⚠</span>
-                <div>
-                  <div style={{ fontSize:"11px", fontWeight:700, color:T.amber, marginBottom:"5px", letterSpacing:".08em" }}>EMI TIMING CONCERN</div>
-                  <p style={{ fontSize:"13px", color:T.textMid, lineHeight:1.65 }}>{loan.emi_concern_detail}</p>
-                </div>
+        </div>
+
+        {/* 3 key numbers */}
+        {loan.key_metrics && (
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:"12px", marginBottom:"20px" }}>
+            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:"12px",
+              padding:"18px", textAlign:"center" }}>
+              <div style={{ fontSize:"11px", color:T.textDim, fontWeight:600, marginBottom:"6px",
+                textTransform:"uppercase", letterSpacing:".08em" }}>Debt as % of Income</div>
+              <div style={{ fontSize:"30px", fontWeight:700,
+                color:loan.key_metrics.debt_service_ratio>40?T.red:loan.key_metrics.debt_service_ratio>30?T.amber:T.green }}>
+                {loan.key_metrics.debt_service_ratio}%
               </div>
+              <div style={{ fontSize:"11px", color:T.textDim, marginTop:"4px" }}>Under 30% is safe</div>
             </div>
+            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:"12px", padding:"18px", textAlign:"center" }}>
+              <div style={{ fontSize:"11px", color:T.textDim, fontWeight:600, marginBottom:"6px", textTransform:"uppercase", letterSpacing:".08em" }}>Loan vs Yearly Income</div>
+              <div style={{ fontSize:"30px", fontWeight:700, color:T.text }}>{loan.key_metrics.loan_to_income_ratio?.toFixed(1)}x</div>
+              <div style={{ fontSize:"11px", color:T.textDim, marginTop:"4px" }}>Times your yearly income</div>
+            </div>
+            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:"12px", padding:"18px", textAlign:"center" }}>
+              <div style={{ fontSize:"11px", color:T.textDim, fontWeight:600, marginBottom:"6px", textTransform:"uppercase", letterSpacing:".08em" }}>You Can Safely Borrow</div>
+              <div style={{ fontSize:"22px", fontWeight:700, color:T.accent }}>₹{loan.key_metrics.risk_adjusted_capacity?.toLocaleString("en-IN")}</div>
+              <div style={{ fontSize:"11px", color:T.textDim, marginTop:"4px" }}>Based on your income</div>
+            </div>
+          </div>
+        )}
+
+        {/* Simple cards — 2 col */}
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"16px", marginBottom:"16px" }}>
+
+          {/* Green flags */}
+          {loan.green_flags?.length > 0 && (
+            <SectionCard title="✅ Things Working in Your Favour">
+              <div style={{ display:"grid", gap:"8px" }}>
+                {loan.green_flags.map((f,i) => (
+                  <div key={i} style={{ display:"flex", gap:"10px", padding:"10px 14px",
+                    background:T.greenLight, borderRadius:"8px" }}>
+                    <span style={{ color:T.green, fontSize:"14px", flexShrink:0 }}>✓</span>
+                    <span style={{ fontSize:"13px", color:T.text, lineHeight:1.6 }}>{f}</span>
+                  </div>
+                ))}
+              </div>
+            </SectionCard>
+          )}
+
+          {/* Red flags */}
+          {loan.red_flags?.length > 0 && (
+            <SectionCard title="🚩 Things to Be Aware Of">
+              <div style={{ display:"grid", gap:"8px" }}>
+                {loan.red_flags.map((f,i) => (
+                  <div key={i} style={{ display:"flex", gap:"10px", padding:"10px 14px",
+                    background:T.redLight, borderRadius:"8px" }}>
+                    <span style={{ color:T.red, fontSize:"14px", flexShrink:0 }}>!</span>
+                    <span style={{ fontSize:"13px", color:T.text, lineHeight:1.6 }}>{f}</span>
+                  </div>
+                ))}
+              </div>
+            </SectionCard>
           )}
         </div>
-        <div style={{ display:"grid", gap:"16px", alignContent:"start" }}>
-          <SectionCard title="Primary Risk Factor"><div style={{ padding:"14px 18px", background:T.redLight, borderRadius:"10px", border:`1px solid #f0c8c0` }}><span style={{ fontSize:"14px", color:T.red }}>{loan.key_risk}</span></div></SectionCard>
-          {loan.safer_alternative && <SectionCard title="Safer Alternative"><p style={{ fontSize:"13px", color:T.textMid, lineHeight:1.75 }}>{loan.safer_alternative}</p></SectionCard>}
-          <SectionCard title="Confidence Level">
-            <StatusBadge label={loan.confidence} level={loan.confidence==="high"?"stable":"moderate"} />
-            <p style={{ fontSize:"12px", color:T.textDim, marginTop:"12px", lineHeight:1.6 }}>Does not predict bank approval.</p>
+
+        {/* What we recommend */}
+        {loan.recommendations && (
+          <SectionCard title="💡 Our Advice for You">
+            <div style={{ display:"grid", gap:"14px" }}>
+              <div style={{ background:T.accentLight, padding:"18px", borderRadius:"10px",
+                border:`1.5px solid ${T.accent}30` }}>
+                <p style={{ fontSize:"14px", color:T.text, lineHeight:1.85, margin:0 }}>
+                  {loan.recommendations.primary_recommendation}
+                </p>
+              </div>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"12px" }}>
+                {loan.recommendations.if_proceeding && (
+                  <div style={{ background:T.amberLight, padding:"14px", borderRadius:"10px" }}>
+                    <div style={{ fontSize:"11px", fontWeight:700, color:T.amber, marginBottom:"6px" }}>IF YOU STILL WANT THIS LOAN</div>
+                    <p style={{ fontSize:"13px", color:T.text, lineHeight:1.7, margin:0 }}>{loan.recommendations.if_proceeding}</p>
+                  </div>
+                )}
+                {loan.recommendations.safer_alternatives?.length > 0 && (
+                  <div style={{ background:T.greenLight, padding:"14px", borderRadius:"10px" }}>
+                    <div style={{ fontSize:"11px", fontWeight:700, color:T.green, marginBottom:"6px" }}>OTHER OPTIONS FOR YOU</div>
+                    <ul style={{ margin:0, paddingLeft:"16px", fontSize:"13px", color:T.text, lineHeight:1.8 }}>
+                      {loan.recommendations.safer_alternatives.map((a,i) => <li key={i}>{a}</li>)}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            </div>
           </SectionCard>
+        )}
+
+        {/* Worst case */}
+        {loan.income_shock_resilience?.worst_case_scenario && (
+          <div style={{ padding:"16px 20px", background:T.redLight, borderRadius:"12px",
+            border:`1px solid #f0c8c0`, marginBottom:"16px", display:"flex", gap:"14px", alignItems:"start" }}>
+            <span style={{ fontSize:"22px", flexShrink:0 }}>⚠️</span>
+            <div>
+              <div style={{ fontSize:"12px", fontWeight:700, color:T.red, marginBottom:"4px" }}>WHAT COULD GO WRONG</div>
+              <p style={{ fontSize:"13px", color:T.text, lineHeight:1.7, margin:0 }}>
+                {loan.income_shock_resilience.worst_case_scenario}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* ── THE BIG REPAYMENT PLAN BUTTON ── */}
+        <div style={{ background:"linear-gradient(135deg, #1e3a32 0%, #2d6a54 100%)",
+          borderRadius:"16px", padding:"28px 32px", marginTop:"8px",
+          display:"flex", alignItems:"center", justifyContent:"space-between", gap:"20px" }}>
+          <div>
+            <div style={{ fontSize:"18px", fontWeight:700, color:"#fff", marginBottom:"6px" }}>
+              Want to go ahead with this loan?
+            </div>
+            <div style={{ fontSize:"14px", color:"rgba(255,255,255,.7)", lineHeight:1.6 }}>
+              We'll make a simple month-by-month plan to help you pay it back without stress.
+            </div>
+          </div>
+          <button onClick={() => setShowRepayment(true)}
+            style={{ background:T.sidebarActive, color:T.sidebarActiveText,
+              border:"none", borderRadius:"12px", padding:"14px 28px",
+              fontSize:"14px", fontWeight:700, cursor:"pointer", whiteSpace:"nowrap",
+              boxShadow:"0 4px 20px rgba(184,240,74,.4)", transition:"all .2s",
+              flexShrink:0 }}
+            onMouseEnter={e => e.target.style.transform="translateY(-2px)"}
+            onMouseLeave={e => e.target.style.transform="none"}>
+            📅 Show Me a Repayment Plan
+          </button>
+        </div>
+
+        <div style={{ marginTop:"12px", padding:"14px 20px", background:T.surfaceAlt,
+          borderRadius:"10px", border:`1px solid ${T.border}` }}>
+          <p style={{ fontSize:"12px", color:T.textDim, lineHeight:1.7, margin:0 }}>
+            <strong style={{ color:T.textMid }}>Note:</strong> This is a suitability check, not a bank guarantee. Always talk to your bank or a NABARD officer before signing anything.
+          </p>
         </div>
       </div>
-      <NavButtons tab="loan" onNav={onNav} hasResults={true} />
+    );
+  }
+
+  return (
+    <div style={{ opacity:visible?1:0, transition:"opacity .35s ease" }}>
+      <div style={{ marginBottom:"32px" }}>
+        <h2 style={{ fontSize:"28px", fontWeight:600, color:T.text, margin:"0 0 10px" }}>Should You Take This Loan?</h2>
+        <p style={{ fontSize:"14px", color:T.textMid, lineHeight:1.7 }}>Tell us about yourself and the loan — we'll give you an honest answer in seconds.</p>
+      </div>
+      <SectionCard title="About You">
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"20px" }}>
+          <div><FieldLabel required>Your Name</FieldLabel><TextInput placeholder="e.g. Ramesh Patil" value={form.name} onChange={e=>set("name",e.target.value)} /></div>
+          <div><FieldLabel required>Your State</FieldLabel><SelectInput value={form.state} onChange={e=>set("state",e.target.value)}>{STATES.map(s=><option key={s}>{s}</option>)}</SelectInput></div>
+          <div><FieldLabel required>Land You Own (acres)</FieldLabel><TextInput placeholder="e.g. 2.5" type="number" value={form.land_acres} onChange={e=>set("land_acres",e.target.value)} /></div>
+          <div><FieldLabel required>Main Crop</FieldLabel><SelectInput value={form.crop_type} onChange={e=>set("crop_type",e.target.value)}>{CROP_TYPES.map(c=><option key={c}>{c}</option>)}</SelectInput></div>
+        </div>
+      </SectionCard>
+      <SectionCard title="Your Money">
+        <div style={{ marginBottom:"20px" }}>
+          <FieldLabel required>How Do You Earn?</FieldLabel>
+          <div style={{ display:"flex", gap:"12px" }}>{INCOME_TYPES.map(t=><PillToggle key={t} label={t} active={form.income_type===t.toLowerCase()} onClick={()=>set("income_type",t.toLowerCase())} />)}</div>
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:"20px" }}>
+          <div><FieldLabel required>Monthly Income (₹)</FieldLabel><TextInput placeholder="e.g. 15000" type="number" value={form.monthly_income_inr} onChange={e=>set("monthly_income_inr",e.target.value)} /></div>
+          <div><FieldLabel required>Family Size</FieldLabel><TextInput placeholder="e.g. 5" type="number" value={form.household_size} onChange={e=>set("household_size",e.target.value)} /></div>
+          <div><FieldLabel>Current Debt (₹)</FieldLabel><TextInput placeholder="0 if none" type="number" value={form.existing_debt_inr} onChange={e=>set("existing_debt_inr",e.target.value)} /></div>
+        </div>
+      </SectionCard>
+      <SectionCard title="Risks You Face">
+        <div style={{ display:"flex", flexWrap:"wrap", gap:"10px" }}>
+          {RISK_OPTIONS.map(r=><RiskChip key={r} label={r} active={isRisk(r)} onClick={()=>toggleRisk(r)} />)}
+        </div>
+      </SectionCard>
+      <SectionCard title="The Loan You Want">
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"20px" }}>
+          <div><FieldLabel required>What Is It For?</FieldLabel><TextInput placeholder="e.g. Buy a tractor" value={form.loan_purpose} onChange={e=>set("loan_purpose",e.target.value)} /></div>
+          <div><FieldLabel required>How Much? (₹)</FieldLabel><TextInput type="number" placeholder="e.g. 200000" value={form.loan_amount_inr} onChange={e=>set("loan_amount_inr",e.target.value)} /></div>
+        </div>
+      </SectionCard>
+      <button onClick={handleAssess} disabled={loading}
+        style={{ width:"100%", padding:"16px 24px", background:T.sidebar, color:"#fff",
+          border:"none", borderRadius:"12px", fontSize:"15px", fontWeight:600, cursor:"pointer",
+          boxShadow:"0 2px 8px rgba(0,0,0,.1)" }}>
+        Check If This Loan Is Right for Me →
+      </button>
+      {error && <div style={{ color:T.red, fontSize:"13px", marginTop:"10px", padding:"12px", background:T.redLight, borderRadius:"8px" }}>{error}</div>}
     </div>
   );
 }
@@ -696,8 +1036,8 @@ function ActionStep({ step:a }) {
     <div onMouseEnter={()=>setH(true)} onMouseLeave={()=>setH(false)}
       style={{ display:"flex", gap:"14px", padding:"14px 16px",
         background:h?T.accentLight:T.surfaceAlt, borderRadius:"10px",
-        border:`1px solid ${h?T.borderFocus+"40":T.border}`,
-        transition:"all .2s", transform:h?"translateX(4px)":"none" }}>
+        border:`1px solid ${h?T.borderFocus+"40":T.border}`, transition:"all .2s",
+        transform:h?"translateX(4px)":"none" }}>
       <div style={{ width:"30px", height:"30px", borderRadius:"50%", flexShrink:0,
         background:h?T.accent:T.accentLight, border:`1.5px solid ${h?T.accent:T.borderFocus+"60"}`,
         color:h?"#fff":T.accent, fontSize:"13px", fontWeight:700,
@@ -716,20 +1056,21 @@ function DecisionTab({ decision, farmerName, onNav }) {
   return (
     <div style={{ opacity:visible?1:0, transform:visible?"none":"translateY(10px)", transition:"all .35s ease" }}>
       <div style={{ marginBottom:"28px" }}>
-        <h2 style={{ fontSize:"28px", fontWeight:600, color:T.text, margin:"0 0 6px", letterSpacing:"-.02em" }}>Final Decision</h2>
-        <p style={{ fontSize:"14px", color:T.textMid }}>Artha's unified recommendation for {farmerName}</p>
+        <h2 style={{ fontSize:"28px", fontWeight:600, color:T.text, margin:"0 0 6px" }}>What You Should Do Next</h2>
+        <p style={{ fontSize:"14px", color:T.textMid }}>Our honest recommendation for {farmerName}</p>
       </div>
       <div style={{ background:T.accentLight, border:`1.5px solid ${T.borderFocus}25`, borderRadius:"14px",
         padding:"28px 32px", marginBottom:"16px", display:"flex", gap:"22px", alignItems:"flex-start" }}>
         <div style={{ fontSize:"44px", flexShrink:0 }}>{recEmoji[decision.recommendation]||"📋"}</div>
         <div>
-          <div style={{ fontSize:"11px", fontWeight:700, color:T.accent, letterSpacing:".14em", textTransform:"uppercase", marginBottom:"10px" }}>Recommendation</div>
+          <div style={{ fontSize:"11px", fontWeight:700, color:T.accent, letterSpacing:".14em",
+            textTransform:"uppercase", marginBottom:"10px" }}>Our Recommendation</div>
           <div style={{ fontSize:"20px", fontWeight:700, color:T.text, lineHeight:1.4, marginBottom:"12px" }}>{decision.headline}</div>
           <p style={{ fontSize:"14px", color:T.textMid, lineHeight:1.85 }}>{decision.reasoning}</p>
         </div>
       </div>
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"16px" }}>
-        <SectionCard title="Priority Actions">
+        <SectionCard title="Steps to Take">
           <div style={{ display:"grid", gap:"12px" }}>
             {(decision.priority_actions||[]).map((a,i) => <ActionStep key={i} step={a} />)}
           </div>
@@ -737,70 +1078,73 @@ function DecisionTab({ decision, farmerName, onNav }) {
         <div style={{ display:"grid", gap:"16px", alignContent:"start" }}>
           {decision.what_to_avoid && (
             <div style={{ background:T.redLight, border:`1px solid #f0c8c0`, borderRadius:"12px", padding:"18px 20px" }}>
-              <div style={{ fontSize:"11px", fontWeight:700, color:T.red, marginBottom:"8px", letterSpacing:".1em" }}>WHAT TO AVOID</div>
+              <div style={{ fontSize:"11px", fontWeight:700, color:T.red, marginBottom:"8px" }}>PLEASE AVOID</div>
               <p style={{ fontSize:"13px", color:T.textMid, lineHeight:1.7 }}>{decision.what_to_avoid}</p>
             </div>
           )}
-          <SectionCard title="Documents Needed">
+          <SectionCard title="Documents You'll Need">
             <div style={{ display:"grid", gap:"7px" }}>
               {(decision.documents_needed||[]).map((d,i) => (
-                <div key={i} style={{ display:"flex", gap:"10px", padding:"10px 14px", background:T.surfaceAlt, borderRadius:"8px" }}>
+                <div key={i} style={{ display:"flex", gap:"10px", padding:"10px 14px",
+                  background:T.surfaceAlt, borderRadius:"8px" }}>
                   <span>📄</span><span style={{ fontSize:"13px", color:T.textMid }}>{d}</span>
                 </div>
               ))}
             </div>
           </SectionCard>
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"12px" }}>
-            <SectionCard title="Timeline"><div style={{ fontSize:"30px", fontWeight:700, color:T.accent }}>{decision.timeline_weeks}w</div><div style={{ fontSize:"11px", color:T.textDim }}>estimated</div></SectionCard>
-            <SectionCard title="Risk Level"><StatusBadge label={decision.overall_risk_level} level={decision.overall_risk_level} /></SectionCard>
+            <SectionCard title="Time Needed">
+              <div style={{ fontSize:"30px", fontWeight:700, color:T.accent }}>{decision.timeline_weeks}w</div>
+              <div style={{ fontSize:"11px", color:T.textDim }}>estimated</div>
+            </SectionCard>
+            <SectionCard title="Risk Level">
+              <StatusBadge label={decision.overall_risk_level} level={decision.overall_risk_level} />
+            </SectionCard>
           </div>
         </div>
       </div>
       <div style={{ marginTop:"4px", padding:"16px 20px", background:T.surfaceAlt, borderRadius:"10px", border:`1px solid ${T.border}` }}>
-        <p style={{ fontSize:"12px", color:T.textDim, lineHeight:1.7 }}><strong style={{ color:T.textMid }}>Disclaimer:</strong> Artha is a suitability advisor, not a financial advisor. Consult your nearest bank or NABARD officer before acting.</p>
+        <p style={{ fontSize:"12px", color:T.textDim, lineHeight:1.7 }}>
+          <strong style={{ color:T.textMid }}>Reminder:</strong> This is guidance, not financial advice. Please speak to your bank or a NABARD officer before making any big decisions.
+        </p>
       </div>
     </div>
   );
 }
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
-function FeatureCard({ icon, label, desc }) {
-  const [h, setH] = useState(false);
-  return (
-    <div onMouseEnter={()=>setH(true)} onMouseLeave={()=>setH(false)}
-      style={{ padding:"18px 20px", background:h?T.accentLight:T.surface,
-        border:`1.5px solid ${h?T.borderFocus+"50":T.border}`, borderRadius:"12px",
-        transition:"all .2s", transform:h?"translateY(-3px)":"none",
-        boxShadow:h?"0 6px 20px rgba(0,0,0,.08)":"0 1px 4px rgba(0,0,0,.04)" }}>
-      <div style={{ fontSize:"24px", marginBottom:"8px" }}>{icon}</div>
-      <div style={{ fontSize:"13px", fontWeight:600, color:T.text, marginBottom:"4px" }}>{label}</div>
-      <div style={{ fontSize:"12px", color:T.textDim }}>{desc}</div>
-    </div>
-  );
-}
-
 function DashboardTab({ onStart }) {
   const [h, setH] = useState(false);
   return (
     <div style={{ maxWidth:"560px" }}>
       <div style={{ marginBottom:"32px" }}>
         <h2 style={{ fontSize:"32px", fontWeight:700, color:T.text, margin:"0 0 12px", letterSpacing:"-.02em" }}>Welcome to Artha</h2>
-        <p style={{ fontSize:"15px", color:T.textMid, lineHeight:1.8 }}>Artha evaluates your financial context and recommends the most suitable form of support — loan, scheme, both, or neither.</p>
+        <p style={{ fontSize:"15px", color:T.textMid, lineHeight:1.8 }}>
+          Artha helps you figure out the best financial support for your farm — whether that's a government scheme, a loan, both, or neither.
+        </p>
       </div>
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"12px", marginBottom:"28px" }}>
         {[
-          { icon:"🌾", label:"Income Analysis", desc:"Seasonal pattern recognition" },
-          { icon:"📋", label:"Scheme Matching", desc:"5 curated government schemes" },
-          { icon:"💰", label:"Loan Suitability", desc:"Cycle-aware assessment" },
-          { icon:"⚖️", label:"Decision Engine", desc:"Cross-instrument reasoning" },
-        ].map((f,i) => <FeatureCard key={i} {...f} />)}
+          { icon:"🌾", label:"Understand Your Finances", desc:"See where your money goes" },
+          { icon:"📋", label:"Find Government Schemes", desc:"Check what you qualify for" },
+          { icon:"💰", label:"Check If a Loan Is Right", desc:"Honest, personalised answer" },
+          { icon:"⚖️", label:"Get a Clear Plan", desc:"Simple steps to follow" },
+        ].map((f,i) => (
+          <div key={i} style={{ padding:"18px 20px", background:T.surface,
+            border:`1.5px solid ${T.border}`, borderRadius:"12px",
+            boxShadow:"0 1px 4px rgba(0,0,0,.04)" }}>
+            <div style={{ fontSize:"24px", marginBottom:"8px" }}>{f.icon}</div>
+            <div style={{ fontSize:"13px", fontWeight:600, color:T.text, marginBottom:"4px" }}>{f.label}</div>
+            <div style={{ fontSize:"12px", color:T.textDim }}>{f.desc}</div>
+          </div>
+        ))}
       </div>
       <button onClick={onStart} onMouseEnter={()=>setH(true)} onMouseLeave={()=>setH(false)}
         style={{ padding:"15px 32px", background:h?"#1a2e24":T.sidebar, color:"#fff",
           border:"none", borderRadius:"12px", fontSize:"15px", fontWeight:600, cursor:"pointer",
           transition:"all .2s", boxShadow:h?`0 8px 28px ${T.sidebar}60`:"0 2px 8px rgba(0,0,0,.12)",
           transform:h?"translateY(-2px)":"none" }}>
-        Start Profile Analysis →
+        Get Started →
       </button>
     </div>
   );
@@ -818,12 +1162,13 @@ export default function App() {
   const handleAnalyse = async (profileData) => {
     setLoading(true); setError(null); setFarmerName(profileData.name);
     try {
-      const res = await fetch(`${API_BASE}/analyse`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(profileData) });
+      const res = await fetch(`${API_BASE}/analyse`, {
+        method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(profileData)
+      });
       if (!res.ok) { const e = await res.json(); throw new Error(e.detail||"Analysis failed"); }
       setResults(await res.json());
       setActiveTab("snapshot");
-    } catch(e) { setError(e.message); }
-    finally { setLoading(false); }
+    } catch(e) { setError(e.message); } finally { setLoading(false); }
   };
 
   return (
@@ -839,22 +1184,20 @@ export default function App() {
       <Sidebar active={activeTab} onNav={setActiveTab} hasResults={hasResults} />
 
       <main style={{ flex:1, padding:"44px 56px", overflowY:"auto" }}>
-        <StepBar current={TAB_STEP[activeTab]||1} />
-
+        {activeTab !== "loan" && <StepBar current={TAB_STEP[activeTab]||1} />}
         {error && (
           <div style={{ background:T.redLight, border:`1px solid #f0c8c0`, borderRadius:"12px",
             padding:"16px 20px", marginBottom:"24px", fontSize:"14px", color:T.red }}>
-            <strong>Error:</strong> {error}
-            <div style={{ fontSize:"12px", color:T.textDim, marginTop:"4px" }}>Make sure the backend is running at {API_BASE} and GEMINI_API_KEY is set.</div>
+            <strong>Something went wrong:</strong> {error}
+            <div style={{ fontSize:"12px", color:T.textDim, marginTop:"4px" }}>Make sure the backend is running at {API_BASE}</div>
           </div>
         )}
-
         {activeTab==="dashboard" && <DashboardTab onStart={()=>setActiveTab("profile")} />}
         {activeTab==="profile" && <ProfileTab onSubmit={handleAnalyse} loading={loading} />}
         {activeTab==="snapshot" && results && <SnapshotTab data={results} farmerName={farmerName} onNav={setActiveTab} />}
         {activeTab==="scheme" && results && <SchemesTab schemes={results.scheme_recommendations} onNav={setActiveTab} />}
-        {activeTab==="loan" && results && <LoanTab loan={results.loan_assessment} onNav={setActiveTab} />}
         {activeTab==="decisions" && results && <DecisionTab decision={results.final_decision} farmerName={farmerName} onNav={setActiveTab} />}
+        {activeTab==="loan" && <LoanTab />}
       </main>
     </div>
   );
