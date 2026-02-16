@@ -61,6 +61,114 @@ const T = {
   blue: "#4a8fd4",
 };
 
+// ─── Hindi Translation + TTS ──────────────────────────────────────────────────
+async function translateToHindi(text) {
+  try {
+    const res = await fetch(
+      `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text.slice(0, 500))}&langpair=en|hi`
+    );
+    const data = await res.json();
+    return data.responseData?.translatedText || text;
+  } catch {
+    return text;
+  }
+}
+
+function speakHindi(text) {
+  window.speechSynthesis.cancel();
+  const utter = new SpeechSynthesisUtterance(text);
+  // Prefer a Hindi voice if available
+  const voices = window.speechSynthesis.getVoices();
+  const hindiVoice = voices.find(v => v.lang.startsWith("hi"));
+  if (hindiVoice) utter.voice = hindiVoice;
+  utter.lang = "hi-IN";
+  utter.rate = 0.85;
+  utter.pitch = 1;
+  window.speechSynthesis.speak(utter);
+}
+
+function useHindiToggle(originalText) {
+  const [hindi, setHindi] = useState(null);
+  const [isHindi, setIsHindi] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
+
+  const toggle = async (e) => {
+    e.stopPropagation();
+    if (!isHindi) {
+      if (!hindi) {
+        setLoading(true);
+        const translated = await translateToHindi(originalText);
+        setHindi(translated);
+        setLoading(false);
+        setIsHindi(true);
+        setSpeaking(true);
+        speakHindi(translated);
+        setTimeout(() => setSpeaking(false), 4000);
+      } else {
+        setIsHindi(true);
+        setSpeaking(true);
+        speakHindi(hindi);
+        setTimeout(() => setSpeaking(false), 4000);
+      }
+    } else {
+      window.speechSynthesis.cancel();
+      setIsHindi(false);
+      setSpeaking(false);
+    }
+  };
+
+  return { displayText: isHindi ? hindi : originalText, isHindi, loading, speaking, toggle };
+}
+
+// Wrap any text to make it clickable + translatable
+function HindiText({ text, style={}, as="p" }) {
+  const { displayText, isHindi, loading, speaking, toggle } = useHindiToggle(text);
+  const [hov, setHov] = useState(false);
+  const Tag = as;
+
+  return (
+    <div style={{ position:"relative", display:"inline-block", width:"100%" }}>
+      <Tag
+        onClick={toggle}
+        onMouseEnter={() => setHov(true)}
+        onMouseLeave={() => setHov(false)}
+        style={{
+          ...style,
+          cursor:"pointer",
+          borderRadius:"6px",
+          padding:"2px 4px",
+          margin:"-2px -4px",
+          transition:"background .15s",
+          background: hov ? (isHindi ? "#fff8e1" : "#f0f9ff") : "transparent",
+          outline: isHindi ? "1.5px dashed #c87a30" : hov ? "1.5px dashed #b0d0e0" : "none",
+          fontFamily: isHindi ? "'Noto Sans Devanagari', sans-serif" : "inherit",
+        }}>
+        {loading ? "अनुवाद हो रहा है..." : displayText}
+      </Tag>
+
+      {/* Indicator pill */}
+      {(hov || isHindi || speaking) && (
+        <div style={{
+          position:"absolute", top:"-22px", right:"0",
+          display:"flex", alignItems:"center", gap:"5px",
+          background: isHindi ? "#fff8e1" : "#f0f9ff",
+          border:`1px solid ${isHindi?"#f0d8b8":"#c0d8e8"}`,
+          borderRadius:"20px", padding:"2px 8px",
+          fontSize:"10px", fontWeight:700,
+          color: isHindi ? T.amber : T.blue,
+          pointerEvents:"none", whiteSpace:"nowrap",
+          boxShadow:"0 2px 8px rgba(0,0,0,.1)",
+          zIndex:10,
+        }}>
+          {speaking && <span style={{ animation:"pulse 1s infinite" }}>🔊</span>}
+          {!speaking && (isHindi ? "🇮🇳 हिन्दी • क्लिक करें" : "🇮🇳 हिन्दी में पढ़ें")}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const TAB_ORDER = ["profile", "snapshot", "scheme", "decisions"];
 const TAB_STEP  = { dashboard: 0, profile: 1, snapshot: 2, scheme: 3, decisions: 4, loan: 0 };
 
@@ -382,7 +490,7 @@ function RepaymentPlanModal({ profile, onClose }) {
                   border:`1.5px solid ${T.accent}30`, marginBottom:"20px" }}>
                   <div style={{ fontSize:"11px", fontWeight:700, color:T.accent, marginBottom:"6px",
                     textTransform:"uppercase", letterSpacing:".1em" }}>💬 A note for you</div>
-                  <p style={{ fontSize:"14px", color:T.text, lineHeight:1.8, margin:0 }}>{plan.opening_advice}</p>
+                  <HindiText text={plan.opening_advice} style={{ fontSize:"14px", color:T.text, lineHeight:1.8 }} />
                 </div>
               )}
               {plan.monthly_breakdown && (
@@ -409,7 +517,7 @@ function RepaymentPlanModal({ profile, onClose }) {
                                 ₹{(m.emi_due||plan.monthly_emi||0).toLocaleString("en-IN")}
                               </span>
                             </div>
-                            <div style={{ fontSize:"12px", color:T.textMid, lineHeight:1.5 }}>{m.tip}</div>
+                            <HindiText text={m.tip} style={{ fontSize:"12px", color:T.textMid, lineHeight:1.5 }} />
                           </div>
                         </div>
                       );
@@ -421,13 +529,13 @@ function RepaymentPlanModal({ profile, onClose }) {
                 {plan.harvest_strategy && (
                   <div style={{ background:T.greenLight, borderRadius:"12px", padding:"16px 18px", border:`1px solid #c0e8d0` }}>
                     <div style={{ fontSize:"11px", fontWeight:700, color:T.green, marginBottom:"8px" }}>🌾 HARVEST SEASON TIP</div>
-                    <p style={{ fontSize:"13px", color:T.text, lineHeight:1.7, margin:0 }}>{plan.harvest_strategy}</p>
+                    <HindiText text={plan.harvest_strategy} style={{ fontSize:"13px", color:T.text, lineHeight:1.7 }} />
                   </div>
                 )}
                 {plan.lean_season_strategy && (
                   <div style={{ background:T.amberLight, borderRadius:"12px", padding:"16px 18px", border:`1px solid #f0d8b8` }}>
                     <div style={{ fontSize:"11px", fontWeight:700, color:T.amber, marginBottom:"8px" }}>☀️ LEAN SEASON TIP</div>
-                    <p style={{ fontSize:"13px", color:T.text, lineHeight:1.7, margin:0 }}>{plan.lean_season_strategy}</p>
+                    <HindiText text={plan.lean_season_strategy} style={{ fontSize:"13px", color:T.text, lineHeight:1.7 }} />
                   </div>
                 )}
               </div>
@@ -437,7 +545,7 @@ function RepaymentPlanModal({ profile, onClose }) {
                     <span style={{ fontSize:"18px" }}>💡</span>
                     <div>
                       <div style={{ fontSize:"11px", fontWeight:700, color:T.textDim, marginBottom:"4px" }}>PAY A LITTLE EXTRA</div>
-                      <div style={{ fontSize:"13px", color:T.text }}>{plan.early_payoff_tip}</div>
+                      <HindiText text={plan.early_payoff_tip} style={{ fontSize:"13px", color:T.text }} />
                     </div>
                   </div>
                 )}
@@ -446,7 +554,7 @@ function RepaymentPlanModal({ profile, onClose }) {
                     <span style={{ fontSize:"18px" }}>🆘</span>
                     <div>
                       <div style={{ fontSize:"11px", fontWeight:700, color:T.red, marginBottom:"4px" }}>IF YOU MISS A PAYMENT</div>
-                      <div style={{ fontSize:"13px", color:T.text }}>{plan.emergency_advice}</div>
+                      <HindiText text={plan.emergency_advice} style={{ fontSize:"13px", color:T.text }} />
                     </div>
                   </div>
                 )}
@@ -867,7 +975,7 @@ function SnapshotTab({ data, farmerName, onNav }) {
         </SectionCard>
         <div style={{ display:"grid", gap:"16px", alignContent:"start" }}>
           <SectionCard title="Summary">
-            <p style={{ fontSize:"14px", color:T.textMid, lineHeight:1.85 }}>{p.profile_summary}</p>
+            <HindiText text={p.profile_summary} style={{ fontSize:"14px", color:T.textMid, lineHeight:1.85 }} />
           </SectionCard>
           <SectionCard title="How Sure Are We?">
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"10px" }}>
@@ -875,7 +983,7 @@ function SnapshotTab({ data, farmerName, onNav }) {
               <StatusBadge label={p.confidence} level={p.confidence==="high"?"stable":p.confidence==="medium"?"moderate":"high"} />
             </div>
             <AnimBar pct={confPct} color={confColor} />
-            <p style={{ fontSize:"12px", color:T.textDim, marginTop:"10px", lineHeight:1.6 }}>{p.confidence_reason}</p>
+            <HindiText text={p.confidence_reason} style={{ fontSize:"12px", color:T.textDim, marginTop:"10px", lineHeight:1.6 }} />
           </SectionCard>
         </div>
       </div>
@@ -1337,7 +1445,7 @@ function SchemesTab({ schemes, onNav }) {
                   <p style={{ fontSize:"15px", color:T.textMid, lineHeight:1.8, marginBottom:"14px" }}>{s.description}</p>
                   <div style={{ borderTop:`1px solid ${T.border}`, paddingTop:"14px", marginTop:"14px" }}>
                     <div style={{ fontSize:"11px", color:T.accent, fontWeight:700, marginBottom:"8px", letterSpacing:".1em" }}>💬 WHY THIS RECOMMENDATION</div>
-                    <p style={{ fontSize:"15px", color:T.text, lineHeight:1.8, fontStyle:"italic", margin:0 }}>{s.reason}</p>
+                    <HindiText text={s.reason} style={{ fontSize:"15px", color:T.text, lineHeight:1.8, fontStyle:"italic" }} />
                   </div>
                 </div>
 
@@ -1386,7 +1494,7 @@ function SchemesTab({ schemes, onNav }) {
                 {s.action_required && (
                   <div style={{ background:"linear-gradient(135deg, #2d6a54 0%, #3a9a64 100%)", borderRadius:"12px", padding:"20px 24px", border:"none", boxShadow:"0 4px 16px rgba(45,106,84,.3)" }}>
                     <div style={{ fontSize:"11px", color:"rgba(255,255,255,.85)", fontWeight:700, marginBottom:"10px", letterSpacing:".1em" }}>⚡ NEXT STEP FOR YOU</div>
-                    <div style={{ fontSize:"16px", color:"#fff", fontWeight:600, lineHeight:1.6 }}>{s.action_required}</div>
+                    <HindiText text={s.action_required} style={{ fontSize:"16px", color:"#fff", fontWeight:600, lineHeight:1.6 }} />
                   </div>
                 )}
 
@@ -1515,7 +1623,7 @@ function LoanTab({ savedProfile = {} }) {
               <div style={{ fontSize:"12px", color:T.textDim, fontWeight:700, textTransform:"uppercase",
                 letterSpacing:".12em", marginBottom:"4px" }}>{cfg.word}</div>
               <div style={{ fontSize:"24px", fontWeight:700, color:cfg.color, marginBottom:"10px" }}>{loan.label_display}</div>
-              <p style={{ fontSize:"15px", color:T.text, lineHeight:1.8, margin:0 }}>{loan.overall_reasoning}</p>
+              <HindiText text={loan.overall_reasoning} style={{ fontSize:"15px", color:T.text, lineHeight:1.8 }} />
             </div>
           </div>
         </div>
@@ -1545,7 +1653,7 @@ function LoanTab({ savedProfile = {} }) {
                 {loan.green_flags.map((f,i) => (
                   <div key={i} style={{ display:"flex", gap:"10px", padding:"10px 14px", background:T.greenLight, borderRadius:"8px" }}>
                     <span style={{ color:T.green, fontSize:"14px", flexShrink:0 }}>✓</span>
-                    <span style={{ fontSize:"13px", color:T.text, lineHeight:1.6 }}>{f}</span>
+                    <HindiText text={f} style={{ fontSize:"13px", color:T.text, lineHeight:1.6 }} as="span" />
                   </div>
                 ))}
               </div>
@@ -1568,20 +1676,22 @@ function LoanTab({ savedProfile = {} }) {
           <SectionCard title="💡 Our Advice for You">
             <div style={{ display:"grid", gap:"14px" }}>
               <div style={{ background:T.accentLight, padding:"18px", borderRadius:"10px", border:`1.5px solid ${T.accent}30` }}>
-                <p style={{ fontSize:"14px", color:T.text, lineHeight:1.85, margin:0 }}>{loan.recommendations.primary_recommendation}</p>
+                <HindiText text={loan.recommendations.primary_recommendation} style={{ fontSize:"14px", color:T.text, lineHeight:1.85 }} />
               </div>
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"12px" }}>
                 {loan.recommendations.if_proceeding && (
                   <div style={{ background:T.amberLight, padding:"14px", borderRadius:"10px" }}>
                     <div style={{ fontSize:"11px", fontWeight:700, color:T.amber, marginBottom:"6px" }}>IF YOU STILL WANT THIS LOAN</div>
-                    <p style={{ fontSize:"13px", color:T.text, lineHeight:1.7, margin:0 }}>{loan.recommendations.if_proceeding}</p>
+                    <HindiText text={loan.recommendations.if_proceeding} style={{ fontSize:"13px", color:T.text, lineHeight:1.7 }} />
                   </div>
                 )}
                 {loan.recommendations.safer_alternatives?.length > 0 && (
                   <div style={{ background:T.greenLight, padding:"14px", borderRadius:"10px" }}>
                     <div style={{ fontSize:"11px", fontWeight:700, color:T.green, marginBottom:"6px" }}>OTHER OPTIONS FOR YOU</div>
                     <ul style={{ margin:0, paddingLeft:"16px", fontSize:"13px", color:T.text, lineHeight:1.8 }}>
-                      {loan.recommendations.safer_alternatives.map((a,i) => <li key={i}>{a}</li>)}
+                      {loan.recommendations.safer_alternatives.map((a,i) => (
+                        <li key={i}><HindiText text={a} style={{ fontSize:"13px", color:T.text, lineHeight:1.8 }} as="span" /></li>
+                      ))}
                     </ul>
                   </div>
                 )}
@@ -1595,7 +1705,7 @@ function LoanTab({ savedProfile = {} }) {
             <span style={{ fontSize:"22px", flexShrink:0 }}>⚠️</span>
             <div>
               <div style={{ fontSize:"12px", fontWeight:700, color:T.red, marginBottom:"4px" }}>WHAT COULD GO WRONG</div>
-              <p style={{ fontSize:"13px", color:T.text, lineHeight:1.7, margin:0 }}>{loan.income_shock_resilience.worst_case_scenario}</p>
+              <HindiText text={loan.income_shock_resilience.worst_case_scenario} style={{ fontSize:"13px", color:T.text, lineHeight:1.7 }} />
             </div>
           </div>
         )}
@@ -1696,8 +1806,8 @@ function ActionStep({ step:a }) {
         color:h?"#fff":T.accent, fontSize:"13px", fontWeight:700,
         display:"flex", alignItems:"center", justifyContent:"center", transition:"all .2s" }}>{a.step}</div>
       <div>
-        <div style={{ fontSize:"13px", fontWeight:600, color:T.text, marginBottom:"3px" }}>{a.action}</div>
-        <div style={{ fontSize:"12px", color:T.textDim }}>{a.why}</div>
+        <HindiText text={a.action} style={{ fontSize:"13px", fontWeight:600, color:T.text, marginBottom:"3px" }} />
+        <HindiText text={a.why} style={{ fontSize:"12px", color:T.textDim }} />
       </div>
     </div>
   );
@@ -1718,8 +1828,8 @@ function DecisionTab({ decision, farmerName, onNav }) {
         <div>
           <div style={{ fontSize:"11px", fontWeight:700, color:T.accent, letterSpacing:".14em",
             textTransform:"uppercase", marginBottom:"10px" }}>Our Recommendation</div>
-          <div style={{ fontSize:"20px", fontWeight:700, color:T.text, lineHeight:1.4, marginBottom:"12px" }}>{decision.headline}</div>
-          <p style={{ fontSize:"14px", color:T.textMid, lineHeight:1.85 }}>{decision.reasoning}</p>
+          <HindiText text={decision.headline} style={{ fontSize:"20px", fontWeight:700, color:T.text, lineHeight:1.4, marginBottom:"12px" }} as="div" />
+          <HindiText text={decision.reasoning} style={{ fontSize:"14px", color:T.textMid, lineHeight:1.85 }} />
         </div>
       </div>
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"16px" }}>
@@ -1732,7 +1842,7 @@ function DecisionTab({ decision, farmerName, onNav }) {
           {decision.what_to_avoid && (
             <div style={{ background:T.redLight, border:`1px solid #f0c8c0`, borderRadius:"12px", padding:"18px 20px" }}>
               <div style={{ fontSize:"11px", fontWeight:700, color:T.red, marginBottom:"8px" }}>PLEASE AVOID</div>
-              <p style={{ fontSize:"13px", color:T.textMid, lineHeight:1.7 }}>{decision.what_to_avoid}</p>
+              <HindiText text={decision.what_to_avoid} style={{ fontSize:"13px", color:T.textMid, lineHeight:1.7 }} />
             </div>
           )}
           <SectionCard title="Documents You'll Need">
@@ -2300,17 +2410,17 @@ function RedFlagCard({ flag, index }) {
             <div>
               <div style={{ fontSize:"11px", fontWeight:700, color:T.textDim, marginBottom:"4px",
                 textTransform:"uppercase" }}>What this means for you</div>
-              <div style={{ fontSize:"13px", color:T.text, lineHeight:1.7 }}>{flag.plain_explanation}</div>
+              <HindiText text={flag.plain_explanation} style={{ fontSize:"13px", color:T.text, lineHeight:1.7 }} />
             </div>
             <div style={{ background:`${sevColor}10`, borderRadius:"8px", padding:"10px 14px" }}>
               <div style={{ fontSize:"11px", fontWeight:700, color:sevColor, marginBottom:"4px",
                 textTransform:"uppercase" }}>⚠ Potential Impact</div>
-              <div style={{ fontSize:"13px", color:T.text, lineHeight:1.7 }}>{flag.potential_impact}</div>
+              <HindiText text={flag.potential_impact} style={{ fontSize:"13px", color:T.text, lineHeight:1.7 }} />
             </div>
             <div style={{ background:T.greenLight, borderRadius:"8px", padding:"10px 14px" }}>
               <div style={{ fontSize:"11px", fontWeight:700, color:T.green, marginBottom:"4px",
                 textTransform:"uppercase" }}>💡 What to do</div>
-              <div style={{ fontSize:"13px", color:T.text, lineHeight:1.7 }}>{flag.recommendation}</div>
+              <HindiText text={flag.recommendation} style={{ fontSize:"13px", color:T.text, lineHeight:1.7 }} />
             </div>
           </div>
         </div>
@@ -2517,13 +2627,11 @@ function LoanAnalyserTab({ onFileSaved }) {
                   <RiskBadge level={result.overall_risk} />
                 </div>
               </div>
-              <p style={{ fontSize:"14px", color:T.text, lineHeight:1.8, margin:"0 0 16px" }}>
-                {result.risk_summary}
-              </p>
+              <HindiText text={result.risk_summary} style={{ fontSize:"14px", color:T.text, lineHeight:1.8, margin:"0 0 16px" }} />
               <div style={{ fontStyle:"italic", fontSize:"14px", fontWeight:600,
                 color:overallColor, padding:"10px 16px", background:`${overallColor}10`,
                 borderRadius:"8px", borderLeft:`3px solid ${overallColor}` }}>
-                {result.verdict}
+                <HindiText text={result.verdict} style={{ fontStyle:"italic", fontSize:"14px", fontWeight:600, color:overallColor }} as="span" />
               </div>
             </div>
             <div style={{ width:"200px", flexShrink:0 }}>
@@ -2601,7 +2709,7 @@ function LoanAnalyserTab({ onFileSaved }) {
                       <div key={i} style={{ display:"flex", gap:"10px", padding:"10px 14px",
                         background:T.surfaceAlt, borderRadius:"8px" }}>
                         <span style={{ fontWeight:700, color:T.blue, flexShrink:0 }}>{i+1}.</span>
-                        <span style={{ fontSize:"13px", color:T.text, lineHeight:1.6 }}>{q}</span>
+                        <HindiText text={q} style={{ fontSize:"13px", color:T.text, lineHeight:1.6 }} as="span" />
                       </div>
                     ))}
                   </div>
@@ -2617,8 +2725,7 @@ function LoanAnalyserTab({ onFileSaved }) {
                         background:i===0?T.accentLight:T.surfaceAlt, borderRadius:"8px",
                         border:i===0?`1px solid ${T.accent}30`:"none" }}>
                         <span style={{ fontWeight:700, color:T.accent, flexShrink:0 }}>{i+1}.</span>
-                        <span style={{ fontSize:"13px", color:T.text, lineHeight:1.6,
-                          fontWeight:i===0?600:400 }}>{a}</span>
+                        <HindiText text={a} style={{ fontSize:"13px", color:T.text, lineHeight:1.6, fontWeight:i===0?600:400 }} as="span" />
                       </div>
                     ))}
                   </div>
@@ -2913,6 +3020,10 @@ export default function App() {
         @keyframes spin { 
           from { transform:rotate(0deg); } 
           to { transform:rotate(360deg); } 
+        }
+        @keyframes pulse {
+          0%, 100% { opacity:1; transform:scale(1); }
+          50% { opacity:0.6; transform:scale(1.15); }
         }
       `}</style>
 
