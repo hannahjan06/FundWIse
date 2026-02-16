@@ -473,6 +473,7 @@ const NAV_MAIN = [
   },
   {id:"loan", label:"Loan Assessment"},
   {id:"browse_schemes", label:"Browse Schemes"},
+  {id:"my_documents", label:"My Documents"},
 ];
 
 function NavItem({ label, active, enabled, onClick, badge, isChild }) {
@@ -571,9 +572,9 @@ function Sidebar({ active, onNav, hasResults, hasProfile, profileImage }) {
               key={item.id} 
               label={item.label} 
               active={active===item.id}
-              enabled={["dashboard","profile","loan","myprofile","browse_schemes"].includes(item.id) ? true : hasResults} 
+              enabled={["dashboard","profile","loan","myprofile","browse_schemes","my_documents"].includes(item.id) ? true : hasResults}
               onClick={() => {
-                const canAccess = ["dashboard","profile","loan","myprofile","browse_schemes"].includes(item.id) ? true : hasResults;
+                const canAccess = ["dashboard","profile","loan","myprofile","browse_schemes","my_documents"].includes(item.id) ? true : hasResults;
                 if (canAccess) onNav(item.id);
               }}
             />
@@ -1763,45 +1764,328 @@ function DecisionTab({ decision, farmerName, onNav }) {
 }
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
-function DashboardTab({ onStart, hasProfile, farmerName }) {
-  const [h, setH] = useState(false);
+// ─── Dashboard ────────────────────────────────────────────────────────────────
+function MiniSparkline({ values, color, height=36 }) {
+  const max = Math.max(...values), min = Math.min(...values);
+  const range = max - min || 1;
+  const w = 120, h = height, pad = 4;
+  const pts = values.map((v, i) => {
+    const x = pad + (i / (values.length - 1)) * (w - pad * 2);
+    const y = h - pad - ((v - min) / range) * (h - pad * 2);
+    return `${x},${y}`;
+  }).join(" ");
+  const areaBottom = `${w - pad},${h - pad} ${pad},${h - pad}`;
   return (
-    <div style={{ maxWidth:"560px" }}>
-      <div style={{ marginBottom:"32px" }}>
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} style={{ overflow:"visible" }}>
+      <defs>
+        <linearGradient id={`sg-${color.replace("#","")}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.25"/>
+          <stop offset="100%" stopColor={color} stopOpacity="0"/>
+        </linearGradient>
+      </defs>
+      <polygon points={`${pts} ${areaBottom}`} fill={`url(#sg-${color.replace("#","")})`} />
+      <polyline points={pts} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      <circle cx={pts.split(" ").at(-1).split(",")[0]} cy={pts.split(" ").at(-1).split(",")[1]}
+        r="3" fill={color} />
+    </svg>
+  );
+}
+
+function AnimCounter({ target, prefix="", suffix="", duration=1200 }) {
+  const [val, setVal] = useState(0);
+  useEffect(() => {
+    const start = Date.now();
+    const tick = () => {
+      const p = Math.min(1, (Date.now() - start) / duration);
+      const ease = 1 - Math.pow(1 - p, 3);
+      setVal(Math.round(ease * target));
+      if (p < 1) requestAnimationFrame(tick);
+    };
+    const raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [target, duration]);
+  return <span>{prefix}{val.toLocaleString("en-IN")}{suffix}</span>;
+}
+
+function DonutMini({ pct, color, size=56 }) {
+  const [animated, setAnimated] = useState(false);
+  useEffect(() => { const t = setTimeout(() => setAnimated(true), 300); return () => clearTimeout(t); }, []);
+  const cx = size/2, cy = size/2, r = size*0.36;
+  const circ = 2 * Math.PI * r;
+  const filled = animated ? (pct/100) * circ : 0;
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke={T.border} strokeWidth="6"/>
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke={color} strokeWidth="6"
+        strokeDasharray={`${filled} ${circ}`} strokeLinecap="round"
+        transform={`rotate(-90 ${cx} ${cy})`}
+        style={{ transition:"stroke-dasharray 1s cubic-bezier(.4,0,.2,1)" }}/>
+      <text x={cx} y={cy+4} textAnchor="middle" fontSize={size*0.22} fontWeight="700"
+        fill={color} fontFamily="Poppins">{pct}%</text>
+    </svg>
+  );
+}
+
+function DashboardTab({ onStart, hasProfile, farmerName, results }) {
+  const [hovered, setHovered] = useState(null);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { const t = setTimeout(() => setMounted(true), 60); return () => clearTimeout(t); }, []);
+
+  // ── Derive real stats from results if available ──
+  const p = results?.profile_summary;
+  const hasResults = !!p;
+
+  const monthlyIncome = p?.income_vs_expense?.income || 0;
+  const monthlyExpenses = p?.income_vs_expense?.expenses || 0;
+  const surplus = p?.income_vs_expense?.surplus || 0;
+  const surplusPct = monthlyIncome > 0 ? Math.round((surplus / monthlyIncome) * 100) : 0;
+  const schemes = results?.scheme_recommendations || [];
+  const recommendedSchemes = schemes.filter(s => s.suitability === "recommended" || s.suitability === "suitable");
+  const topScheme = recommendedSchemes[0];
+  const debtLoad = p?.debt_load || "low";
+  const vulnerability = p?.financial_vulnerability || "low";
+  const expBreakdown = p?.expense_breakdown || [];
+  const biggestExpense = expBreakdown.reduce((a,b) => (b.value||0) > (a.value||0) ? b : a, {label:"—",value:0});
+  const incomeSparkData = [
+    monthlyIncome * 0.7, monthlyIncome * 0.8, monthlyIncome * 0.75,
+    monthlyIncome * 0.9, monthlyIncome * 0.85, monthlyIncome,
+  ];
+
+  const debtColor = debtLoad==="low"?T.green:debtLoad==="medium"?T.amber:T.red;
+  const vulnColor = vulnerability==="low"?T.green:vulnerability==="medium"?T.amber:T.red;
+
+  // ── Generic sparkline data when no results ──
+  const genericIncome  = [8200,9100,7800,12400,11200,10800,13500,15000];
+  const genericSchemes = [2,3,3,4,4,5,5,7];
+  const genericSavings = [500,1200,800,2100,1800,2400,3100,3800];
+
+  const cards = [
+    {
+      id:"analysis", icon:"🌾", label:"Profile Analysis", sublabel:"Full financial snapshot",
+      stat: hasResults ? `₹${surplus.toLocaleString("en-IN")}/mo surplus` : "4 modules",
+      trend: hasResults ? incomeSparkData : genericIncome,
+      trendColor:T.green, trendLabel: hasResults ? "Your income trend" : "Income trend",
+      bg:T.greenLight, border:"#b8e8cc", action:()=>onStart(), cta:"Run Analysis →",
+    },
+    {
+      id:"schemes", icon:"📋", label:"Government Schemes", sublabel:"Subsidies & benefits",
+      stat: hasResults ? `${recommendedSchemes.length} matched for you` : "7 available",
+      trend: hasResults ? schemes.map((_,i)=>i+1) : genericSchemes,
+      trendColor:T.blue, trendLabel: hasResults ? "Schemes matched" : "Available schemes",
+      bg:"#eef4fc", border:"#c0d4f0", action:()=>onStart(), cta:"Browse Schemes →",
+    },
+    {
+      id:"loan", icon:"💰", label:"Loan Checker", sublabel:"Know before you borrow",
+      stat: hasResults ? `${surplusPct}% surplus ratio` : "3-5 sec",
+      trend: hasResults ? expBreakdown.map(e=>e.value||0) : genericSavings,
+      trendColor:T.amber, trendLabel: hasResults ? "Your expenses" : "Savings potential",
+      bg:T.amberLight, border:"#f0d8a8", action:()=>onStart(), cta:"Check a Loan →",
+    },
+  ];
+
+  return (
+    <div style={{ maxWidth:"900px", opacity:mounted?1:0, transform:mounted?"none":"translateY(16px)", transition:"all .5s ease" }}>
+
+      {/* ── Hero ── */}
+      <div style={{ marginBottom:"28px" }}>
         {hasProfile ? (
           <>
-            <div style={{ fontSize:"13px", fontWeight:600, color:T.accent, marginBottom:"8px", textTransform:"uppercase", letterSpacing:".1em" }}>Welcome back</div>
-            <h2 style={{ fontSize:"32px", fontWeight:700, color:T.text, margin:"0 0 12px", letterSpacing:"-.02em" }}>Hello, {farmerName} 👋</h2>
-            <p style={{ fontSize:"15px", color:T.textMid, lineHeight:1.8 }}>Your profile is saved. Run a fresh analysis or check a loan — your details will be filled in automatically.</p>
+            <div style={{ fontSize:"11px", fontWeight:700, color:T.accent, marginBottom:"8px",
+              textTransform:"uppercase", letterSpacing:".16em" }}>Welcome back</div>
+            <h1 style={{ fontSize:"34px", fontWeight:700, color:T.text, margin:"0 0 10px",
+              letterSpacing:"-.03em", lineHeight:1.15 }}>Hello, {farmerName} 👋</h1>
+            <p style={{ fontSize:"14px", color:T.textMid, lineHeight:1.8, maxWidth:"480px" }}>
+              {hasResults
+                ? "Here's your financial dashboard — everything personalised to your situation."
+                : "Your profile is saved. Run a fresh analysis to see your personalised dashboard."}
+            </p>
           </>
         ) : (
           <>
-            <h2 style={{ fontSize:"32px", fontWeight:700, color:T.text, margin:"0 0 12px", letterSpacing:"-.02em" }}>Welcome to Artha</h2>
-            <p style={{ fontSize:"15px", color:T.textMid, lineHeight:1.8 }}>Artha helps you figure out the best financial support for your farm — whether that's a government scheme, a loan, both, or neither.</p>
+            <div style={{ fontSize:"11px", fontWeight:700, color:T.accent, marginBottom:"8px",
+              textTransform:"uppercase", letterSpacing:".16em" }}>Farm Finance Advisor</div>
+            <h1 style={{ fontSize:"34px", fontWeight:700, color:T.text, margin:"0 0 10px",
+              letterSpacing:"-.03em", lineHeight:1.15 }}>Know your finances.<br/>Grow with confidence.</h1>
+            <p style={{ fontSize:"14px", color:T.textMid, lineHeight:1.8, maxWidth:"480px" }}>
+              Artha helps you find the best government schemes, check if a loan makes sense, and get a clear financial plan — all in minutes.
+            </p>
           </>
         )}
       </div>
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"12px", marginBottom:"28px" }}>
-        {[
-          { icon:"🌾", label:"Understand Your Finances", desc:"See where your money goes" },
-          { icon:"📋", label:"Find Government Schemes", desc:"Check what you qualify for" },
-          { icon:"💰", label:"Check If a Loan Is Right", desc:"Honest, personalised answer" },
-          { icon:"⚖️", label:"Get a Clear Plan", desc:"Simple steps to follow" },
-        ].map((f,i) => (
-          <div key={i} style={{ padding:"18px 20px", background:T.surface, border:`1.5px solid ${T.border}`, borderRadius:"12px", boxShadow:"0 1px 4px rgba(0,0,0,.04)" }}>
-            <div style={{ fontSize:"24px", marginBottom:"8px" }}>{f.icon}</div>
-            <div style={{ fontSize:"13px", fontWeight:600, color:T.text, marginBottom:"4px" }}>{f.label}</div>
-            <div style={{ fontSize:"12px", color:T.textDim }}>{f.desc}</div>
+
+      {/* ── PERSONALISED STATS (only when results exist) ── */}
+      {hasResults && (
+        <div style={{ marginBottom:"24px", opacity:mounted?1:0, transition:"opacity .6s ease .2s" }}>
+
+          {/* Big stat row */}
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:"12px", marginBottom:"12px" }}>
+            {[
+              { label:"Monthly Income", value:monthlyIncome, prefix:"₹", color:T.green, icon:"💵" },
+              { label:"Monthly Expenses", value:monthlyExpenses, prefix:"₹", color:T.amber, icon:"🧾" },
+              { label:"Monthly Surplus", value:Math.max(0,surplus), prefix:"₹", color:surplus>=0?T.green:T.red, icon:"📈" },
+              { label:"Schemes for You", value:recommendedSchemes.length, prefix:"", suffix:" found", color:T.blue, icon:"📋" },
+            ].map((s,i) => (
+              <div key={i} style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:"14px",
+                padding:"16px 18px", boxShadow:"0 1px 4px rgba(0,0,0,.04)",
+                opacity:mounted?1:0, transform:mounted?"none":"translateY(8px)",
+                transition:`all .45s ease ${i*80+150}ms` }}>
+                <div style={{ fontSize:"18px", marginBottom:"6px" }}>{s.icon}</div>
+                <div style={{ fontSize:"11px", color:T.textDim, fontWeight:600, textTransform:"uppercase",
+                  letterSpacing:".08em", marginBottom:"6px" }}>{s.label}</div>
+                <div style={{ fontSize:"22px", fontWeight:700, color:s.color }}>
+                  <AnimCounter target={s.value} prefix={s.prefix} suffix={s.suffix||""} duration={900+i*150}/>
+                </div>
+              </div>
+            ))}
           </div>
-        ))}
+
+          {/* Second row — health indicators */}
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:"12px" }}>
+
+            {/* Surplus donut */}
+            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:"14px",
+              padding:"18px 20px", boxShadow:"0 1px 4px rgba(0,0,0,.04)", display:"flex", gap:"16px", alignItems:"center" }}>
+              <DonutMini pct={Math.min(100,Math.max(0,surplusPct))} color={surplusPct>20?T.green:surplusPct>5?T.amber:T.red} />
+              <div>
+                <div style={{ fontSize:"11px", color:T.textDim, fontWeight:600, textTransform:"uppercase",
+                  letterSpacing:".08em", marginBottom:"4px" }}>Surplus Ratio</div>
+                <div style={{ fontSize:"13px", fontWeight:600, color:T.text }}>
+                  {surplusPct>20?"Healthy savings rate":surplusPct>5?"Moderate buffer":"Tight budget"}
+                </div>
+                <div style={{ fontSize:"11px", color:T.textDim, marginTop:"2px" }}>of income left over</div>
+              </div>
+            </div>
+
+            {/* Debt & risk badges */}
+            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:"14px",
+              padding:"18px 20px", boxShadow:"0 1px 4px rgba(0,0,0,.04)" }}>
+              <div style={{ fontSize:"11px", color:T.textDim, fontWeight:600, textTransform:"uppercase",
+                letterSpacing:".08em", marginBottom:"12px" }}>Financial Health</div>
+              <div style={{ display:"grid", gap:"8px" }}>
+                {[
+                  { label:"Debt Load", val:debtLoad, color:debtColor },
+                  { label:"Vulnerability", val:vulnerability, color:vulnColor },
+                ].map((row,i) => (
+                  <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                    <span style={{ fontSize:"12px", color:T.textMid }}>{row.label}</span>
+                    <span style={{ fontSize:"11px", fontWeight:700, color:row.color,
+                      background:`${row.color}15`, padding:"2px 10px", borderRadius:"20px",
+                      textTransform:"capitalize", border:`1px solid ${row.color}30` }}>{row.val}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Top scheme or biggest expense */}
+            <div style={{ background:T.accentLight, border:`1.5px solid ${T.accent}30`,
+              borderRadius:"14px", padding:"18px 20px", boxShadow:"0 1px 4px rgba(0,0,0,.04)" }}>
+              {topScheme ? (
+                <>
+                  <div style={{ fontSize:"11px", color:T.accent, fontWeight:700, textTransform:"uppercase",
+                    letterSpacing:".08em", marginBottom:"8px" }}>⭐ Top Scheme for You</div>
+                  <div style={{ fontSize:"13px", fontWeight:700, color:T.text, marginBottom:"4px",
+                    lineHeight:1.4 }}>{topScheme.name}</div>
+                  <div style={{ fontSize:"12px", color:T.textMid, lineHeight:1.5 }}>
+                    {topScheme.benefit_inr?.slice(0,60)}{topScheme.benefit_inr?.length>60?"…":""}
+                  </div>
+                </>
+              ) : biggestExpense.label !== "—" ? (
+                <>
+                  <div style={{ fontSize:"11px", color:T.accent, fontWeight:700, textTransform:"uppercase",
+                    letterSpacing:".08em", marginBottom:"8px" }}>📊 Biggest Expense</div>
+                  <div style={{ fontSize:"22px", fontWeight:700, color:T.text, marginBottom:"3px" }}>
+                    ₹{(biggestExpense.value||0).toLocaleString("en-IN")}
+                  </div>
+                  <div style={{ fontSize:"12px", color:T.textMid }}>{biggestExpense.label}/month</div>
+                </>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Generic stat strip (no results yet) ── */}
+      {!hasResults && (
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:"12px", marginBottom:"24px" }}>
+          {[
+            { label:"Farmers Helped", value:12480, suffix:"+", color:T.green },
+            { label:"Schemes Tracked", value:24, suffix:"", color:T.blue },
+            { label:"Avg. Benefit Found", value:18500, prefix:"₹", color:T.amber },
+          ].map((s,i) => (
+            <div key={i} style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:"14px",
+              padding:"18px 20px", boxShadow:"0 1px 4px rgba(0,0,0,.04)",
+              opacity:mounted?1:0, transform:mounted?"none":"translateY(10px)",
+              transition:`all .5s ease ${i*100+200}ms` }}>
+              <div style={{ fontSize:"11px", color:T.textDim, fontWeight:600, textTransform:"uppercase",
+                letterSpacing:".1em", marginBottom:"8px" }}>{s.label}</div>
+              <div style={{ fontSize:"26px", fontWeight:700, color:s.color }}>
+                {mounted && <AnimCounter target={s.value} prefix={s.prefix||""} suffix={s.suffix} duration={1000+i*200}/>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── Feature cards ── */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:"14px", marginBottom:"24px" }}>
+        {cards.map((card,i) => {
+          const isHov = hovered===card.id;
+          return (
+            <div key={card.id}
+              onMouseEnter={()=>setHovered(card.id)} onMouseLeave={()=>setHovered(null)}
+              onClick={card.action}
+              style={{ background:isHov?card.bg:T.surface,
+                border:`1.5px solid ${isHov?card.border:T.border}`,
+                borderRadius:"16px", padding:"20px", cursor:"pointer",
+                transition:"all .22s ease",
+                transform:isHov?"translateY(-4px)":"none",
+                boxShadow:isHov?`0 12px 32px ${card.trendColor}20`:"0 1px 4px rgba(0,0,0,.04)",
+                opacity:mounted?1:0, transitionDelay:`${i*80+100}ms` }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:"12px" }}>
+                <div style={{ fontSize:"26px" }}>{card.icon}</div>
+                <span style={{ fontSize:"10px", fontWeight:700, color:card.trendColor,
+                  background:`${card.trendColor}15`, padding:"3px 9px",
+                  borderRadius:"20px", border:`1px solid ${card.trendColor}30`, textAlign:"right",
+                  maxWidth:"120px", lineHeight:1.4 }}>{card.stat}</span>
+              </div>
+              <div style={{ fontSize:"13px", fontWeight:700, color:T.text, marginBottom:"2px" }}>{card.label}</div>
+              <div style={{ fontSize:"11px", color:T.textDim, marginBottom:"14px" }}>{card.sublabel}</div>
+              <div style={{ fontSize:"10px", color:T.textDim, fontWeight:600, textTransform:"uppercase",
+                letterSpacing:".08em", marginBottom:"4px" }}>{card.trendLabel}</div>
+              <MiniSparkline values={card.trend.length>1?card.trend:[0,1]} color={card.trendColor} />
+              <div style={{ marginTop:"12px", fontSize:"12px", fontWeight:700, color:card.trendColor,
+                opacity:isHov?1:0.5, transition:"opacity .2s" }}>{card.cta}</div>
+            </div>
+          );
+        })}
       </div>
-      <button onClick={onStart} onMouseEnter={()=>setH(true)} onMouseLeave={()=>setH(false)}
-        style={{ padding:"15px 32px", background:h?"#1a2e24":T.sidebar, color:"#fff",
-          border:"none", borderRadius:"12px", fontSize:"15px", fontWeight:600, cursor:"pointer",
-          transition:"all .2s", boxShadow:h?`0 8px 28px ${T.sidebar}60`:"0 2px 8px rgba(0,0,0,.12)",
-          transform:h?"translateY(-2px)":"none" }}>
-        {hasProfile ? "Run New Analysis →" : "Get Started →"}
-      </button>
+
+      {/* ── CTA banner ── */}
+      <div style={{ background:T.sidebar, borderRadius:"16px", padding:"22px 28px",
+        display:"flex", alignItems:"center", justifyContent:"space-between", gap:"20px",
+        boxShadow:`0 8px 32px ${T.sidebar}40` }}>
+        <div>
+          <div style={{ fontSize:"15px", fontWeight:700, color:"#fff", marginBottom:"4px" }}>
+            {hasResults?"Want to re-run your analysis?":hasProfile?"Ready to continue?":"Get started in 2 minutes"}
+          </div>
+          <div style={{ fontSize:"12px", color:T.sidebarText, lineHeight:1.6 }}>
+            {hasResults
+              ? "Your saved details will auto-fill — just update anything that's changed."
+              : hasProfile
+              ? "Your saved details will auto-fill — just hit go."
+              : "Fill in your profile once, and we'll handle the rest."}
+          </div>
+        </div>
+        <button onClick={onStart}
+          style={{ background:T.sidebarActive, color:T.sidebarActiveText,
+            border:"none", borderRadius:"12px", padding:"12px 26px",
+            fontSize:"14px", fontWeight:700, cursor:"pointer", whiteSpace:"nowrap",
+            boxShadow:`0 4px 20px ${T.sidebarActive}50`, transition:"all .2s", flexShrink:0 }}
+          onMouseEnter={e=>{e.target.style.transform="translateY(-2px)";}}
+          onMouseLeave={e=>{e.target.style.transform="none";}}>
+          {hasResults?"Run Again →":hasProfile?"Run Analysis →":"Get Started →"}
+        </button>
+      </div>
     </div>
   );
 }
@@ -1922,6 +2206,228 @@ function MyProfileTab({ savedProfile, onSave, onClear }) {
   );
 }
 
+// ─── My Documents Tab ────────────────────────────────────────────────────────
+const DOCS_KEY = "artha_documents";
+
+function useDocumentStore() {
+  const [docs, setDocs] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(DOCS_KEY) || "[]"); }
+    catch { return []; }
+  });
+  const save = (updated) => {
+    setDocs(updated);
+    try { localStorage.setItem(DOCS_KEY, JSON.stringify(updated)); } catch {}
+  };
+  const addFiles = (files) => {
+    Array.from(files).forEach(file => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const newDoc = {
+          id: Date.now() + Math.random(),
+          name: file.name,
+          size: file.size,
+          type: file.type,
+          dataUrl: e.target.result,
+          folder: file.webkitRelativePath ? file.webkitRelativePath.split("/")[0] : "Uncategorized",
+          uploadedAt: new Date().toISOString(),
+        };
+        setDocs(prev => {
+          const updated = [...prev, newDoc];
+          try { localStorage.setItem(DOCS_KEY, JSON.stringify(updated)); } catch {}
+          return updated;
+        });
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+  const deleteDoc = (id) => save(docs.filter(d => d.id !== id));
+  const clearAll = () => save([]);
+  const renameDoc = (id, name) => save(docs.map(d => d.id===id ? {...d, name} : d));
+  const downloadDoc = (doc) => {
+    const a = document.createElement("a");
+    a.href = doc.dataUrl || "#";
+    a.download = doc.name;
+    if (!doc.dataUrl) {
+      alert(`"${doc.name}" — file metadata is saved but the actual file content isn't stored in the browser.\n\nTo enable downloads, files need to be stored as data URLs (see note below).`);
+      return;
+    }
+    a.click();
+  };
+  return { docs, addFiles, deleteDoc, renameDoc, downloadDoc, clearAll };
+}
+
+function DocRow({ doc, onDelete, onRename, onDownload }) {
+  const [h, setH] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const [newName, setNewName] = useState(doc.name);
+  const ext = doc.name.split(".").pop()?.toLowerCase();
+  const icon = { pdf:"📄", jpg:"🖼️", jpeg:"🖼️", png:"🖼️", doc:"📝", docx:"📝", xls:"📊", xlsx:"📊", csv:"📊" }[ext] || "📎";
+  const sizeLabel = doc.size > 1048576 ? `${(doc.size/1048576).toFixed(1)} MB` : `${Math.round(doc.size/1024)} KB`;
+
+  const handleRenameSubmit = () => {
+    if (newName.trim() && newName.trim() !== doc.name) onRename(doc.id, newName.trim());
+    setRenaming(false);
+  };
+
+  return (
+    <div onMouseEnter={()=>setH(true)} onMouseLeave={()=>setH(false)}
+      style={{ display:"flex", alignItems:"center", gap:"12px", padding:"12px 16px",
+        background:h?T.accentLight:T.surfaceAlt, borderRadius:"10px",
+        border:`1px solid ${h?T.borderFocus+"40":T.border}`, transition:"all .2s" }}>
+      
+      <span style={{ fontSize:"22px", flexShrink:0 }}>{icon}</span>
+
+      <div style={{ flex:1, minWidth:0 }}>
+        {renaming ? (
+          <div style={{ display:"flex", gap:"8px", alignItems:"center" }}>
+            <input
+              autoFocus
+              value={newName}
+              onChange={e => setNewName(e.target.value)}
+              onKeyDown={e => { if(e.key==="Enter") handleRenameSubmit(); if(e.key==="Escape") setRenaming(false); }}
+              style={{ flex:1, padding:"4px 10px", borderRadius:"6px", border:`1.5px solid ${T.borderFocus}`,
+                fontSize:"13px", color:T.text, outline:"none", fontFamily:"inherit" }}
+            />
+            <button onClick={handleRenameSubmit}
+              style={{ padding:"4px 10px", background:T.accent, color:"#fff", border:"none",
+                borderRadius:"6px", fontSize:"12px", cursor:"pointer", fontWeight:600 }}>Save</button>
+            <button onClick={()=>setRenaming(false)}
+              style={{ padding:"4px 10px", background:"transparent", color:T.textDim, border:`1px solid ${T.border}`,
+                borderRadius:"6px", fontSize:"12px", cursor:"pointer" }}>Cancel</button>
+          </div>
+        ) : (
+          <>
+            <div style={{ fontSize:"13px", fontWeight:600, color:T.text, whiteSpace:"nowrap",
+              overflow:"hidden", textOverflow:"ellipsis" }}>{doc.name}</div>
+            <div style={{ fontSize:"11px", color:T.textDim, marginTop:"2px" }}>
+              {sizeLabel} · {doc.folder !== "Uncategorized" ? `📁 ${doc.folder} · ` : ""}{new Date(doc.uploadedAt).toLocaleDateString("en-IN")}
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Action buttons - visible on hover */}
+      {!renaming && (
+        <div style={{ display:"flex", gap:"4px", opacity:h?1:0, transition:"opacity .15s" }}>
+          <button onClick={()=>onDownload(doc)}
+            title="Download"
+            style={{ background:"transparent", border:`1px solid ${T.border}`, color:T.textMid,
+              cursor:"pointer", fontSize:"13px", padding:"5px 9px", borderRadius:"6px",
+              transition:"all .15s" }}>⬇</button>
+          <button onClick={()=>{ setNewName(doc.name); setRenaming(true); }}
+            title="Rename"
+            style={{ background:"transparent", border:`1px solid ${T.border}`, color:T.textMid,
+              cursor:"pointer", fontSize:"13px", padding:"5px 9px", borderRadius:"6px",
+              transition:"all .15s" }}>✏️</button>
+          <button onClick={()=>onDelete(doc.id)}
+            title="Delete"
+            style={{ background:"transparent", border:`1px solid ${T.red}30`, color:T.red,
+              cursor:"pointer", fontSize:"13px", padding:"5px 9px", borderRadius:"6px",
+              transition:"all .15s" }}>✕</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MyDocumentsTab() {
+  const { docs, addFiles, deleteDoc, renameDoc, downloadDoc, clearAll } = useDocumentStore();
+  const fileRef = useRef(null);
+  const folderRef = useRef(null);
+  const [dragging, setDragging] = useState(false);
+  const [filter, setFilter] = useState("all");
+  const visible = useFadeIn("my_documents");
+
+  const folders = ["all", ...new Set(docs.map(d => d.folder))];
+  const filtered = filter === "all" ? docs : docs.filter(d => d.folder === filter);
+
+  const handleDrop = (e) => {
+    e.preventDefault(); setDragging(false);
+    if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
+  };
+
+  return (
+    <div style={{ opacity:visible?1:0, transform:visible?"none":"translateY(10px)", transition:"all .35s ease" }}>
+      <div style={{ marginBottom:"28px", display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
+        <div>
+          <h2 style={{ fontSize:"28px", fontWeight:600, color:T.text, margin:"0 0 6px" }}>My Documents</h2>
+          <p style={{ fontSize:"14px", color:T.textMid }}>{docs.length} file{docs.length!==1?"s":""} saved on this device</p>
+        </div>
+        {docs.length > 0 && (
+          <button onClick={clearAll}
+            style={{ padding:"8px 16px", background:"transparent", border:`1.5px solid ${T.red}40`,
+              borderRadius:"8px", color:T.red, fontSize:"13px", cursor:"pointer" }}>
+            Clear All
+          </button>
+        )}
+      </div>
+
+      {/* Drop Zone */}
+      <div
+        onDragOver={(e)=>{e.preventDefault();setDragging(true);}}
+        onDragLeave={()=>setDragging(false)}
+        onDrop={handleDrop}
+        style={{ border:`2px dashed ${dragging?T.accent:T.border}`, borderRadius:"14px",
+          padding:"40px 24px", textAlign:"center", background:dragging?T.accentLight:T.surfaceAlt,
+          marginBottom:"24px", transition:"all .2s", cursor:"pointer" }}
+        onClick={()=>fileRef.current?.click()}>
+        <div style={{ fontSize:"36px", marginBottom:"12px" }}>📁</div>
+        <div style={{ fontSize:"14px", fontWeight:600, color:T.text, marginBottom:"6px" }}>Drop files here or click to upload</div>
+        <div style={{ fontSize:"12px", color:T.textDim, marginBottom:"20px" }}>PDF, images, Word docs, spreadsheets — anything relevant to your farm</div>
+        <div style={{ display:"flex", gap:"10px", justifyContent:"center" }}>
+          <button onClick={(e)=>{e.stopPropagation();fileRef.current?.click();}}
+            style={{ padding:"10px 22px", background:T.sidebar, color:"#fff", border:"none",
+              borderRadius:"8px", fontSize:"13px", fontWeight:600, cursor:"pointer" }}>
+            Upload Files
+          </button>
+          <button onClick={(e)=>{e.stopPropagation();folderRef.current?.click();}}
+            style={{ padding:"10px 22px", background:"transparent", border:`1.5px solid ${T.border}`,
+              borderRadius:"8px", color:T.textMid, fontSize:"13px", fontWeight:600, cursor:"pointer" }}>
+            Upload Folder
+          </button>
+        </div>
+        <input ref={fileRef} type="file" multiple style={{ display:"none" }} onChange={e=>addFiles(e.target.files)} />
+        <input ref={folderRef} type="file" multiple webkitdirectory="" style={{ display:"none" }} onChange={e=>addFiles(e.target.files)} />
+      </div>
+
+      {/* Folder Filter Pills */}
+      {folders.length > 1 && (
+        <div style={{ display:"flex", gap:"10px", marginBottom:"20px", flexWrap:"wrap" }}>
+          {folders.map(f => (
+            <button key={f} onClick={()=>setFilter(f)}
+              style={{ padding:"7px 18px", borderRadius:"50px", fontSize:"13px", cursor:"pointer",
+                border:`1.5px solid ${filter===f?T.accent:T.border}`,
+                background:filter===f?T.accent:"transparent",
+                color:filter===f?"#fff":T.textMid, fontWeight:filter===f?600:400,
+                textTransform:"capitalize", transition:"all .2s" }}>
+              {f === "all" ? "All Files" : `📁 ${f}`}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Files List */}
+      {filtered.length === 0 ? (
+        <div style={{ textAlign:"center", padding:"60px 20px", color:T.textDim }}>
+          <div style={{ fontSize:"40px", marginBottom:"12px" }}>📭</div>
+          <div style={{ fontSize:"14px" }}>No documents uploaded yet</div>
+        </div>
+      ) : (
+        <div style={{ display:"grid", gap:"8px" }}>
+          {filtered.map(doc => <DocRow key={doc.id} doc={doc} onDelete={deleteDoc} onRename={renameDoc} onDownload={downloadDoc} />)}
+        </div>
+      )}
+
+      <div style={{ marginTop:"20px", padding:"14px 18px", background:T.surfaceAlt,
+        borderRadius:"10px", border:`1px solid ${T.border}` }}>
+        <p style={{ fontSize:"12px", color:T.textDim, lineHeight:1.7, margin:0 }}>
+          🔒 Files are stored only in your browser's local storage. Nothing is uploaded to any server.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // ─── App Root ─────────────────────────────────────────────────────────────────
 export default function App() {
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -1945,7 +2451,7 @@ export default function App() {
     } catch(e) { setError(e.message); } finally { setLoading(false); }
   };
 
-  const noStepBar = ["loan","myprofile","browse_schemes"].includes(activeTab);
+  const noStepBar = ["dashboard","loan","myprofile","browse_schemes","my_documents"].includes(activeTab);
 
   return (
     <div style={{ display:"flex", minHeight:"100vh", background:T.bg }}>
@@ -1978,13 +2484,14 @@ export default function App() {
             <div style={{ fontSize:"12px", color:T.textDim, marginTop:"4px" }}>Make sure the backend is running at {API_BASE}</div>
           </div>
         )}
-        {activeTab==="dashboard" && <DashboardTab onStart={()=>setActiveTab("profile")} hasProfile={hasProfile} farmerName={savedProfile.name} />}
+        {activeTab==="dashboard" && <DashboardTab onStart={()=>setActiveTab("profile")} hasProfile={hasProfile} farmerName={savedProfile.name} results={results} />}
         {activeTab==="profile" && <ProfileTab onSubmit={handleAnalyse} loading={loading} savedProfile={savedProfile} />}
         {activeTab==="snapshot" && results && <SnapshotTab data={results} farmerName={farmerName} onNav={setActiveTab} />}
         {activeTab==="browse_schemes" && <BrowseSchemesTab />}
         {activeTab==="scheme" && results && <SchemesTab schemes={results.scheme_recommendations} onNav={setActiveTab} />}
         {activeTab==="decisions" && results && <DecisionTab decision={results.final_decision} farmerName={farmerName} onNav={setActiveTab} />}
         {activeTab==="loan" && <LoanTab savedProfile={savedProfile} />}
+        {activeTab==="my_documents" && <MyDocumentsTab />}
         {activeTab==="myprofile" && <MyProfileTab savedProfile={savedProfile} onSave={saveProfile} onClear={clearProfile} />}
       </main>
     </div>
