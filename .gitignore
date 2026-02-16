@@ -1,0 +1,33 @@
+# General
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.log
+
+# Python / Backend
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+ENV/
+.env
+backend/.env
+backend/venv/
+backend/__pycache__/
+
+# Node / Frontend
+node_modules/
+dist/
+build/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+frontend/node_modules/
+frontend/dist/
