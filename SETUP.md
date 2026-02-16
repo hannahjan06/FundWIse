@@ -1,4 +1,4 @@
-# FundWise — Setup Guide
+# SahyogAI — Setup Guide
 
 Two terminals. Five minutes.
 

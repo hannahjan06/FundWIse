@@ -11,7 +11,7 @@ from groq import Groq
 
 load_dotenv()
 
-app = FastAPI(title="FundWise API", version="2.0.0")
+app = FastAPI(title="SahyogAI API", version="2.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -432,7 +432,7 @@ Return JSON talking directly to {p.name}:
 
 @app.get("/")
 def root():
-    return {"status": "FundWise API running", "version": "2.0.0", "provider": "Groq", "model": GROQ_MODEL}
+    return {"status": "SahyogAI API running", "version": "2.0.0", "provider": "Groq", "model": GROQ_MODEL}
 
 
 @app.get("/health")
