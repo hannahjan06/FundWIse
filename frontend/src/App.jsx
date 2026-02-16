@@ -1,6 +1,39 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 const API_BASE = "http://localhost:8000";
+const PROFILE_KEY = "artha_farmer_profile";
+
+// ─── Persistent Profile Hook ──────────────────────────────────────────────────
+const DEFAULT_PROFILE = {
+  name: "", state: "Maharashtra", land_acres: "", crop_type: "Soybean",
+  income_type: "seasonal", monthly_income_inr: "", household_size: "",
+  existing_debt_inr: "", risk_exposure: ["drought"], profile_image: null,
+};
+
+function useSavedProfile() {
+  const [profile, setProfile] = useState(() => {
+    try {
+      const saved = localStorage.getItem(PROFILE_KEY);
+      return saved ? { ...DEFAULT_PROFILE, ...JSON.parse(saved) } : DEFAULT_PROFILE;
+    } catch { return DEFAULT_PROFILE; }
+  });
+
+  const saveProfile = (data) => {
+    const toSave = { ...data };
+    delete toSave.loan_purpose;
+    delete toSave.loan_amount_inr;
+    setProfile(toSave);
+    try { localStorage.setItem(PROFILE_KEY, JSON.stringify(toSave)); } catch {}
+  };
+
+  const clearProfile = () => {
+    setProfile(DEFAULT_PROFILE);
+    try { localStorage.removeItem(PROFILE_KEY); } catch {}
+  };
+
+  const hasProfile = !!(profile.name && profile.monthly_income_inr);
+  return { profile, saveProfile, clearProfile, hasProfile };
+}
 
 const T = {
   sidebar: "#1e3a32", sidebarHover: "#28503f",
@@ -171,6 +204,77 @@ function RiskGauge({ score, label, description, delay=0 }) {
   );
 }
 
+// ─── Image Upload Component ───────────────────────────────────────────────────
+function ProfileImageUpload({ value, onChange }) {
+  const fileRef = useRef(null);
+  const [dragging, setDragging] = useState(false);
+  const [hov, setHov] = useState(false);
+
+  const handleFile = (file) => {
+    if (!file || !file.type.startsWith("image/")) return;
+    const reader = new FileReader();
+    reader.onload = (e) => onChange(e.target.result);
+    reader.readAsDataURL(file);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setDragging(false);
+    handleFile(e.dataTransfer.files[0]);
+  };
+
+  return (
+    <div style={{ display:"flex", alignItems:"center", gap:"28px", marginBottom:"28px",
+      padding:"24px 28px", background:T.surface, borderRadius:"14px",
+      border:`1px solid ${T.border}`, boxShadow:"0 1px 4px rgba(0,0,0,.04)" }}>
+
+      {/* Avatar preview */}
+      <div style={{ position:"relative", flexShrink:0 }}>
+        <div style={{ width:"96px", height:"96px", borderRadius:"50%",
+          background:value ? "transparent" : T.accentLight,
+          border:`3px solid ${value ? T.accent : T.border}`,
+          overflow:"hidden", display:"flex", alignItems:"center", justifyContent:"center",
+          transition:"border-color .2s" }}>
+          {value
+            ? <img src={value} alt="Profile" style={{ width:"100%", height:"100%", objectFit:"cover" }} />
+            : <span style={{ fontSize:"36px" }}>👤</span>
+          }
+        </div>
+        {value && (
+          <button onClick={() => onChange(null)}
+            style={{ position:"absolute", top:"-2px", right:"-2px", width:"22px", height:"22px",
+              borderRadius:"50%", background:T.red, color:"#fff", border:"2px solid #fff",
+              fontSize:"10px", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center",
+              fontWeight:700, lineHeight:1 }}>✕</button>
+        )}
+      </div>
+
+      {/* Drop zone */}
+      <div
+        onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={handleDrop}
+        onMouseEnter={() => setHov(true)}
+        onMouseLeave={() => setHov(false)}
+        onClick={() => fileRef.current?.click()}
+        style={{ flex:1, padding:"20px 24px", borderRadius:"12px",
+          border:`2px dashed ${dragging ? T.accent : hov ? T.borderFocus : T.border}`,
+          background:dragging ? T.accentLight : hov ? "#f7fbf9" : T.surfaceAlt,
+          cursor:"pointer", textAlign:"center", transition:"all .2s" }}>
+        <div style={{ fontSize:"24px", marginBottom:"8px" }}>📷</div>
+        <div style={{ fontSize:"13px", fontWeight:600, color:T.text, marginBottom:"4px" }}>
+          {value ? "Change profile photo" : "Upload a photo (optional)"}
+        </div>
+        <div style={{ fontSize:"11px", color:T.textDim }}>
+          Drag & drop here, or click to browse · JPG, PNG, WEBP
+        </div>
+        <input ref={fileRef} type="file" accept="image/*" style={{ display:"none" }}
+          onChange={(e) => handleFile(e.target.files[0])} />
+      </div>
+    </div>
+  );
+}
+
 // ─── Repayment Plan Modal ─────────────────────────────────────────────────────
 function RepaymentPlanModal({ profile, onClose }) {
   const [loading, setLoading] = useState(true);
@@ -208,7 +312,6 @@ function RepaymentPlanModal({ profile, onClose }) {
         maxHeight:"88vh", overflow:"hidden", display:"flex", flexDirection:"column",
         boxShadow:"0 24px 80px rgba(0,0,0,.25)" }}>
 
-        {/* Header */}
         <div style={{ padding:"24px 28px", borderBottom:`1px solid ${T.border}`,
           display:"flex", justifyContent:"space-between", alignItems:"center",
           background:T.sidebar, borderRadius:"20px 20px 0 0" }}>
@@ -224,7 +327,6 @@ function RepaymentPlanModal({ profile, onClose }) {
           </button>
         </div>
 
-        {/* Content */}
         <div style={{ overflowY:"auto", padding:"24px 28px", flex:1 }}>
           {loading && (
             <div style={{ display:"flex", flexDirection:"column", alignItems:"center", padding:"50px" }}>
@@ -234,16 +336,11 @@ function RepaymentPlanModal({ profile, onClose }) {
               <div style={{ fontSize:"14px", color:T.textMid }}>Building your plan...</div>
             </div>
           )}
-
           {error && (
-            <div style={{ padding:"20px", background:T.redLight, borderRadius:"10px", color:T.red }}>
-              {error}
-            </div>
+            <div style={{ padding:"20px", background:T.redLight, borderRadius:"10px", color:T.red }}>{error}</div>
           )}
-
           {plan && (
             <div>
-              {/* Summary strip */}
               <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:"12px", marginBottom:"20px" }}>
                 {[
                   { label:"Monthly Payment", val:`₹${plan.monthly_emi?.toLocaleString("en-IN")}`, color:T.text },
@@ -258,8 +355,6 @@ function RepaymentPlanModal({ profile, onClose }) {
                   </div>
                 ))}
               </div>
-
-              {/* Opening advice */}
               {plan.opening_advice && (
                 <div style={{ background:T.accentLight, borderRadius:"12px", padding:"16px 20px",
                   border:`1.5px solid ${T.accent}30`, marginBottom:"20px" }}>
@@ -268,8 +363,6 @@ function RepaymentPlanModal({ profile, onClose }) {
                   <p style={{ fontSize:"14px", color:T.text, lineHeight:1.8, margin:0 }}>{plan.opening_advice}</p>
                 </div>
               )}
-
-              {/* Monthly breakdown */}
               {plan.monthly_breakdown && (
                 <div style={{ marginBottom:"20px" }}>
                   <div style={{ fontSize:"11px", fontWeight:700, color:T.textDim, letterSpacing:".14em",
@@ -280,14 +373,11 @@ function RepaymentPlanModal({ profile, onClose }) {
                       const se = SEASON_EMOJI[m.season] || "📆";
                       return (
                         <div key={i} style={{ display:"flex", alignItems:"center", gap:"14px",
-                          padding:"12px 16px", background:T.surfaceAlt, borderRadius:"10px",
-                          border:`1px solid ${T.border}`, transition:"all .15s" }}>
+                          padding:"12px 16px", background:T.surfaceAlt, borderRadius:"10px", border:`1px solid ${T.border}` }}>
                           <div style={{ width:"36px", height:"36px", borderRadius:"50%", flexShrink:0,
                             background:`${sc}18`, border:`2px solid ${sc}40`,
                             display:"flex", alignItems:"center", justifyContent:"center",
-                            fontSize:"13px", fontWeight:700, color:sc }}>
-                            {m.month}
-                          </div>
+                            fontSize:"13px", fontWeight:700, color:sc }}>{m.month}</div>
                           <div style={{ flex:1 }}>
                             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"3px" }}>
                               <span style={{ fontSize:"11px", color:sc, fontWeight:600 }}>
@@ -305,30 +395,23 @@ function RepaymentPlanModal({ profile, onClose }) {
                   </div>
                 </div>
               )}
-
-              {/* Strategies */}
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"12px", marginBottom:"16px" }}>
                 {plan.harvest_strategy && (
-                  <div style={{ background:T.greenLight, borderRadius:"12px", padding:"16px 18px",
-                    border:`1px solid #c0e8d0` }}>
+                  <div style={{ background:T.greenLight, borderRadius:"12px", padding:"16px 18px", border:`1px solid #c0e8d0` }}>
                     <div style={{ fontSize:"11px", fontWeight:700, color:T.green, marginBottom:"8px" }}>🌾 HARVEST SEASON TIP</div>
                     <p style={{ fontSize:"13px", color:T.text, lineHeight:1.7, margin:0 }}>{plan.harvest_strategy}</p>
                   </div>
                 )}
                 {plan.lean_season_strategy && (
-                  <div style={{ background:T.amberLight, borderRadius:"12px", padding:"16px 18px",
-                    border:`1px solid #f0d8b8` }}>
+                  <div style={{ background:T.amberLight, borderRadius:"12px", padding:"16px 18px", border:`1px solid #f0d8b8` }}>
                     <div style={{ fontSize:"11px", fontWeight:700, color:T.amber, marginBottom:"8px" }}>☀️ LEAN SEASON TIP</div>
                     <p style={{ fontSize:"13px", color:T.text, lineHeight:1.7, margin:0 }}>{plan.lean_season_strategy}</p>
                   </div>
                 )}
               </div>
-
-              {/* Extra tips */}
               <div style={{ display:"grid", gap:"10px" }}>
                 {plan.early_payoff_tip && (
-                  <div style={{ display:"flex", gap:"12px", padding:"14px 16px",
-                    background:T.surfaceAlt, borderRadius:"10px", border:`1px solid ${T.border}` }}>
+                  <div style={{ display:"flex", gap:"12px", padding:"14px 16px", background:T.surfaceAlt, borderRadius:"10px", border:`1px solid ${T.border}` }}>
                     <span style={{ fontSize:"18px" }}>💡</span>
                     <div>
                       <div style={{ fontSize:"11px", fontWeight:700, color:T.textDim, marginBottom:"4px" }}>PAY A LITTLE EXTRA</div>
@@ -337,8 +420,7 @@ function RepaymentPlanModal({ profile, onClose }) {
                   </div>
                 )}
                 {plan.emergency_advice && (
-                  <div style={{ display:"flex", gap:"12px", padding:"14px 16px",
-                    background:T.redLight, borderRadius:"10px", border:`1px solid #f0c8c0` }}>
+                  <div style={{ display:"flex", gap:"12px", padding:"14px 16px", background:T.redLight, borderRadius:"10px", border:`1px solid #f0c8c0` }}>
                     <span style={{ fontSize:"18px" }}>🆘</span>
                     <div>
                       <div style={{ fontSize:"11px", fontWeight:700, color:T.red, marginBottom:"4px" }}>IF YOU MISS A PAYMENT</div>
@@ -365,10 +447,11 @@ const NAV_MAIN = [
   {id:"loan", label:"Loan Assessment"},
 ];
 
-function NavItem({ label, active, enabled, onClick }) {
+function NavItem({ label, active, enabled, onClick, badge }) {
   const [h, setH] = useState(false);
   return <button onClick={onClick} onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)}
-    style={{ display:"block", width:"100%", textAlign:"left",
+    style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
+      width:"100%", textAlign:"left",
       background:active?T.sidebarActive:h&&enabled?T.sidebarHover:"transparent",
       color:active?T.sidebarActiveText:enabled?(h?"#fff":T.sidebarText):T.sidebarTextDim,
       border:"none", padding:"10px 16px", fontSize:"13.5px",
@@ -377,30 +460,79 @@ function NavItem({ label, active, enabled, onClick }) {
       transition:"all .18s", opacity:enabled?1:0.4,
       transform:h&&enabled&&!active?"translateX(3px)":"translateX(0)" }}>
     {label}
+    {badge && <span style={{ fontSize:"8px", background:T.sidebarActive, color:T.sidebarActiveText,
+      borderRadius:"4px", padding:"2px 6px", fontWeight:700, marginLeft:"6px" }}>SAVED</span>}
   </button>;
 }
 
-function Sidebar({ active, onNav, hasResults }) {
-  const can = (id) => ["dashboard","profile","loan"].includes(id) ? true : hasResults;
+function Sidebar({ active, onNav, hasResults, hasProfile, profileImage }) {
+  const can = (id) => ["dashboard","profile","loan","myprofile"].includes(id) ? true : hasResults;
   return (
     <div style={{ width:"240px", minHeight:"100vh", background:T.sidebar, flexShrink:0,
       display:"flex", flexDirection:"column", padding:"24px 0",
       position:"sticky", top:0, alignSelf:"flex-start" }}>
-      <div style={{ padding:"0 20px 28px", display:"flex", justifyContent:"flex-end" }}>
-        <div style={{ display:"flex", flexDirection:"column", gap:"5px" }}>
-          {[0,1,2].map(i => <div key={i} style={{ width:"20px", height:"2px", background:T.sidebarText, borderRadius:"2px" }} />)}
-        </div>
+
+      {/* Logo area */}
+      <div style={{ padding:"0 20px 24px" }}>
+        <div style={{ fontSize:"20px", fontWeight:700, color:"#fff", letterSpacing:"-.02em" }}>Artha</div>
+        <div style={{ fontSize:"11px", color:T.sidebarTextDim, marginTop:"2px" }}>Farm Finance Advisor</div>
       </div>
+
       <nav style={{ flex:1, padding:"0 12px" }}>
         {NAV_MAIN.map(item => (
           <NavItem key={item.id} label={item.label} active={active===item.id}
             enabled={can(item.id)} onClick={() => can(item.id) && onNav(item.id)} />
         ))}
-        <div style={{ height:"1px", background:"#2d4a3e", margin:"20px 8px" }} />
+        <div style={{ height:"1px", background:"#2d4a3e", margin:"16px 8px" }} />
         {["Report","Help & Support","Settings"].map(l => (
           <div key={l} style={{ padding:"10px 16px", fontSize:"13px", color:T.sidebarTextDim, opacity:0.5 }}>{l}</div>
         ))}
       </nav>
+
+      {/* My Profile button — white background */}
+      <div style={{ padding:"12px" }}>
+        <button onClick={() => onNav("myprofile")}
+          style={{ width:"100%", display:"flex", alignItems:"center", gap:"10px",
+            padding:"12px 14px", borderRadius:"10px",
+            background: active==="myprofile" ? T.sidebarActive : "#42695eff",
+            border: `1px solid ${active==="myprofile" ? "transparent" : "rgba(255,255,255,.15)"}`,
+            color: active==="myprofile" ? T.sidebarActiveText : T.text,
+            cursor:"pointer", transition:"all .2s",
+            boxShadow: active==="myprofile" ? "none" : "0 2px 8px rgba(0,0,0,.18)" }}>
+
+          {/* Avatar */}
+          <div style={{ width:"32px", height:"32px", borderRadius:"50%",
+            background: profileImage ? "transparent" : (hasProfile ? "#b8f04a30" : "#e8eee8"),
+            border:`2px solid ${hasProfile ? T.accent : "#ccd8cc"}`,
+            display:"flex", alignItems:"center", justifyContent:"center",
+            fontSize:"14px", flexShrink:0, overflow:"hidden", position:"relative" }}>
+            {profileImage
+              ? <img src={profileImage} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} />
+              : <span>👤</span>
+            }
+          </div>
+
+          <div style={{ textAlign:"left", flex:1 }}>
+            <div style={{ fontSize:"13px", fontWeight:600, color: active==="myprofile" ? T.sidebarActiveText : T.text }}>
+              My Profile
+            </div>
+            <div style={{ fontSize:"10px", marginTop:"1px",
+              color: active==="myprofile" ? T.sidebarActiveText : (hasProfile ? T.textDim : T.red) }}>
+              {hasProfile ? "Profile saved ✓" : "Not set up yet"}
+            </div>
+          </div>
+
+          {/* ! badge when not set up */}
+          {!hasProfile && (
+            <div style={{ width:"18px", height:"18px", borderRadius:"50%",
+              background:T.red, color:"#fff", fontSize:"11px", fontWeight:700,
+              display:"flex", alignItems:"center", justifyContent:"center",
+              flexShrink:0, boxShadow:"0 1px 4px rgba(200,74,58,.4)" }}>
+              !
+            </div>
+          )}
+        </button>
+      </div>
     </div>
   );
 }
@@ -469,11 +601,12 @@ const INCOME_TYPES = ["Seasonal","Mixed","Fixed"];
 const CROP_TYPES = ["Rice","Wheat","Soybean","Cotton","Sugarcane","Maize","Vegetables","Pulses","Groundnut","Other"];
 const STATES = ["Maharashtra","Punjab","Uttar Pradesh","Madhya Pradesh","Karnataka","Rajasthan","Bihar","Andhra Pradesh","Tamil Nadu","Gujarat"];
 
-function ProfileTab({ onSubmit, loading }) {
+function ProfileTab({ onSubmit, loading, savedProfile }) {
   const [form, setForm] = useState({
     name:"", state:"Maharashtra", land_acres:"", crop_type:"Soybean",
     income_type:"seasonal", monthly_income_inr:"", household_size:"",
     existing_debt_inr:"", risk_exposure:["drought"],
+    ...savedProfile,
   });
   const set = (k,v) => setForm(f => ({...f,[k]:v}));
   const toggleRisk = (r) => {
@@ -495,6 +628,16 @@ function ProfileTab({ onSubmit, loading }) {
         <h2 style={{ fontSize:"28px", fontWeight:600, color:T.text, margin:"0 0 10px", letterSpacing:"-.02em" }}>Tell us about yourself</h2>
         <p style={{ fontSize:"14px", color:T.textMid, lineHeight:1.7 }}>Your information stays on your device. We use it to find the best financial support for you.</p>
       </div>
+      {savedProfile?.name && (
+        <div style={{ display:"flex", alignItems:"center", gap:"12px", padding:"12px 18px",
+          background:T.greenLight, borderRadius:"10px", border:`1px solid #c0e8d0`, marginBottom:"20px" }}>
+          <span style={{ fontSize:"18px" }}>✓</span>
+          <div style={{ flex:1 }}>
+            <div style={{ fontSize:"13px", fontWeight:600, color:T.green }}>Profile auto-filled from your saved details</div>
+            <div style={{ fontSize:"12px", color:T.textDim, marginTop:"2px" }}>Review and update anything before running the analysis.</div>
+          </div>
+        </div>
+      )}
       <SectionCard title="Basic Information">
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"20px" }}>
           <div><FieldLabel required>Your Name</FieldLabel><TextInput placeholder="e.g. Ramesh Patil" value={form.name} onChange={e=>set("name",e.target.value)} /></div>
@@ -753,7 +896,7 @@ function SchemesTab({ schemes, onNav }) {
 }
 
 // ─── Loan Tab ─────────────────────────────────────────────────────────────────
-function LoanTab() {
+function LoanTab({ savedProfile = {} }) {
   const visible = useFadeIn("loan");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
@@ -765,7 +908,8 @@ function LoanTab() {
     name:"", state:"Maharashtra", land_acres:"", crop_type:"Soybean",
     income_type:"seasonal", monthly_income_inr:"", household_size:"",
     existing_debt_inr:"", risk_exposure:["drought"],
-    loan_purpose:"", loan_amount_inr:""
+    loan_purpose:"", loan_amount_inr:"",
+    ...savedProfile,
   });
   const set = (k,v) => setForm(f => ({...f,[k]:v}));
   const toggleRisk = (r) => {
@@ -819,7 +963,6 @@ function LoanTab() {
         {showRepayment && formSnapshot && (
           <RepaymentPlanModal profile={formSnapshot} onClose={() => setShowRepayment(false)} />
         )}
-
         <div style={{ marginBottom:"24px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
           <div>
             <h2 style={{ fontSize:"28px", fontWeight:600, color:T.text, margin:"0 0 4px" }}>Your Loan Check</h2>
@@ -827,8 +970,6 @@ function LoanTab() {
           </div>
           <Btn variant="ghost" onClick={() => setResult(null)}>Check Another Loan</Btn>
         </div>
-
-        {/* Big verdict */}
         <div style={{ background:cfg.bg, border:`2px solid ${cfg.border}`, borderRadius:"16px",
           padding:"28px 32px", marginBottom:"20px" }}>
           <div style={{ display:"flex", alignItems:"center", gap:"20px" }}>
@@ -843,18 +984,11 @@ function LoanTab() {
             </div>
           </div>
         </div>
-
-        {/* 3 key numbers */}
         {loan.key_metrics && (
           <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:"12px", marginBottom:"20px" }}>
-            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:"12px",
-              padding:"18px", textAlign:"center" }}>
-              <div style={{ fontSize:"11px", color:T.textDim, fontWeight:600, marginBottom:"6px",
-                textTransform:"uppercase", letterSpacing:".08em" }}>Debt as % of Income</div>
-              <div style={{ fontSize:"30px", fontWeight:700,
-                color:loan.key_metrics.debt_service_ratio>40?T.red:loan.key_metrics.debt_service_ratio>30?T.amber:T.green }}>
-                {loan.key_metrics.debt_service_ratio}%
-              </div>
+            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:"12px", padding:"18px", textAlign:"center" }}>
+              <div style={{ fontSize:"11px", color:T.textDim, fontWeight:600, marginBottom:"6px", textTransform:"uppercase", letterSpacing:".08em" }}>Debt as % of Income</div>
+              <div style={{ fontSize:"30px", fontWeight:700, color:loan.key_metrics.debt_service_ratio>40?T.red:loan.key_metrics.debt_service_ratio>30?T.amber:T.green }}>{loan.key_metrics.debt_service_ratio}%</div>
               <div style={{ fontSize:"11px", color:T.textDim, marginTop:"4px" }}>Under 30% is safe</div>
             </div>
             <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:"12px", padding:"18px", textAlign:"center" }}>
@@ -869,17 +1003,12 @@ function LoanTab() {
             </div>
           </div>
         )}
-
-        {/* Simple cards — 2 col */}
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"16px", marginBottom:"16px" }}>
-
-          {/* Green flags */}
           {loan.green_flags?.length > 0 && (
             <SectionCard title="✅ Things Working in Your Favour">
               <div style={{ display:"grid", gap:"8px" }}>
                 {loan.green_flags.map((f,i) => (
-                  <div key={i} style={{ display:"flex", gap:"10px", padding:"10px 14px",
-                    background:T.greenLight, borderRadius:"8px" }}>
+                  <div key={i} style={{ display:"flex", gap:"10px", padding:"10px 14px", background:T.greenLight, borderRadius:"8px" }}>
                     <span style={{ color:T.green, fontSize:"14px", flexShrink:0 }}>✓</span>
                     <span style={{ fontSize:"13px", color:T.text, lineHeight:1.6 }}>{f}</span>
                   </div>
@@ -887,14 +1016,11 @@ function LoanTab() {
               </div>
             </SectionCard>
           )}
-
-          {/* Red flags */}
           {loan.red_flags?.length > 0 && (
             <SectionCard title="🚩 Things to Be Aware Of">
               <div style={{ display:"grid", gap:"8px" }}>
                 {loan.red_flags.map((f,i) => (
-                  <div key={i} style={{ display:"flex", gap:"10px", padding:"10px 14px",
-                    background:T.redLight, borderRadius:"8px" }}>
+                  <div key={i} style={{ display:"flex", gap:"10px", padding:"10px 14px", background:T.redLight, borderRadius:"8px" }}>
                     <span style={{ color:T.red, fontSize:"14px", flexShrink:0 }}>!</span>
                     <span style={{ fontSize:"13px", color:T.text, lineHeight:1.6 }}>{f}</span>
                   </div>
@@ -903,16 +1029,11 @@ function LoanTab() {
             </SectionCard>
           )}
         </div>
-
-        {/* What we recommend */}
         {loan.recommendations && (
           <SectionCard title="💡 Our Advice for You">
             <div style={{ display:"grid", gap:"14px" }}>
-              <div style={{ background:T.accentLight, padding:"18px", borderRadius:"10px",
-                border:`1.5px solid ${T.accent}30` }}>
-                <p style={{ fontSize:"14px", color:T.text, lineHeight:1.85, margin:0 }}>
-                  {loan.recommendations.primary_recommendation}
-                </p>
+              <div style={{ background:T.accentLight, padding:"18px", borderRadius:"10px", border:`1.5px solid ${T.accent}30` }}>
+                <p style={{ fontSize:"14px", color:T.text, lineHeight:1.85, margin:0 }}>{loan.recommendations.primary_recommendation}</p>
               </div>
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"12px" }}>
                 {loan.recommendations.if_proceeding && (
@@ -933,47 +1054,34 @@ function LoanTab() {
             </div>
           </SectionCard>
         )}
-
-        {/* Worst case */}
         {loan.income_shock_resilience?.worst_case_scenario && (
           <div style={{ padding:"16px 20px", background:T.redLight, borderRadius:"12px",
             border:`1px solid #f0c8c0`, marginBottom:"16px", display:"flex", gap:"14px", alignItems:"start" }}>
             <span style={{ fontSize:"22px", flexShrink:0 }}>⚠️</span>
             <div>
               <div style={{ fontSize:"12px", fontWeight:700, color:T.red, marginBottom:"4px" }}>WHAT COULD GO WRONG</div>
-              <p style={{ fontSize:"13px", color:T.text, lineHeight:1.7, margin:0 }}>
-                {loan.income_shock_resilience.worst_case_scenario}
-              </p>
+              <p style={{ fontSize:"13px", color:T.text, lineHeight:1.7, margin:0 }}>{loan.income_shock_resilience.worst_case_scenario}</p>
             </div>
           </div>
         )}
-
-        {/* ── THE BIG REPAYMENT PLAN BUTTON ── */}
         <div style={{ background:"linear-gradient(135deg, #1e3a32 0%, #2d6a54 100%)",
           borderRadius:"16px", padding:"28px 32px", marginTop:"8px",
           display:"flex", alignItems:"center", justifyContent:"space-between", gap:"20px" }}>
           <div>
-            <div style={{ fontSize:"18px", fontWeight:700, color:"#fff", marginBottom:"6px" }}>
-              Want to go ahead with this loan?
-            </div>
-            <div style={{ fontSize:"14px", color:"rgba(255,255,255,.7)", lineHeight:1.6 }}>
-              We'll make a simple month-by-month plan to help you pay it back without stress.
-            </div>
+            <div style={{ fontSize:"18px", fontWeight:700, color:"#fff", marginBottom:"6px" }}>Want to go ahead with this loan?</div>
+            <div style={{ fontSize:"14px", color:"rgba(255,255,255,.7)", lineHeight:1.6 }}>We'll make a simple month-by-month plan to help you pay it back without stress.</div>
           </div>
           <button onClick={() => setShowRepayment(true)}
             style={{ background:T.sidebarActive, color:T.sidebarActiveText,
               border:"none", borderRadius:"12px", padding:"14px 28px",
               fontSize:"14px", fontWeight:700, cursor:"pointer", whiteSpace:"nowrap",
-              boxShadow:"0 4px 20px rgba(184,240,74,.4)", transition:"all .2s",
-              flexShrink:0 }}
+              boxShadow:"0 4px 20px rgba(184,240,74,.4)", transition:"all .2s", flexShrink:0 }}
             onMouseEnter={e => e.target.style.transform="translateY(-2px)"}
             onMouseLeave={e => e.target.style.transform="none"}>
             📅 Show Me a Repayment Plan
           </button>
         </div>
-
-        <div style={{ marginTop:"12px", padding:"14px 20px", background:T.surfaceAlt,
-          borderRadius:"10px", border:`1px solid ${T.border}` }}>
+        <div style={{ marginTop:"12px", padding:"14px 20px", background:T.surfaceAlt, borderRadius:"10px", border:`1px solid ${T.border}` }}>
           <p style={{ fontSize:"12px", color:T.textDim, lineHeight:1.7, margin:0 }}>
             <strong style={{ color:T.textMid }}>Note:</strong> This is a suitability check, not a bank guarantee. Always talk to your bank or a NABARD officer before signing anything.
           </p>
@@ -988,6 +1096,16 @@ function LoanTab() {
         <h2 style={{ fontSize:"28px", fontWeight:600, color:T.text, margin:"0 0 10px" }}>Should You Take This Loan?</h2>
         <p style={{ fontSize:"14px", color:T.textMid, lineHeight:1.7 }}>Tell us about yourself and the loan — we'll give you an honest answer in seconds.</p>
       </div>
+      {savedProfile?.name && (
+        <div style={{ display:"flex", alignItems:"center", gap:"12px", padding:"12px 18px",
+          background:T.greenLight, borderRadius:"10px", border:`1px solid #c0e8d0`, marginBottom:"20px" }}>
+          <span style={{ fontSize:"18px" }}>✓</span>
+          <div style={{ flex:1 }}>
+            <div style={{ fontSize:"13px", fontWeight:600, color:T.green }}>Your saved profile has been auto-filled</div>
+            <div style={{ fontSize:"12px", color:T.textDim, marginTop:"2px" }}>Just add your loan details below and you're ready to go.</div>
+          </div>
+        </div>
+      )}
       <SectionCard title="About You">
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"20px" }}>
           <div><FieldLabel required>Your Name</FieldLabel><TextInput placeholder="e.g. Ramesh Patil" value={form.name} onChange={e=>set("name",e.target.value)} /></div>
@@ -1085,8 +1203,7 @@ function DecisionTab({ decision, farmerName, onNav }) {
           <SectionCard title="Documents You'll Need">
             <div style={{ display:"grid", gap:"7px" }}>
               {(decision.documents_needed||[]).map((d,i) => (
-                <div key={i} style={{ display:"flex", gap:"10px", padding:"10px 14px",
-                  background:T.surfaceAlt, borderRadius:"8px" }}>
+                <div key={i} style={{ display:"flex", gap:"10px", padding:"10px 14px", background:T.surfaceAlt, borderRadius:"8px" }}>
                   <span>📄</span><span style={{ fontSize:"13px", color:T.textMid }}>{d}</span>
                 </div>
               ))}
@@ -1113,15 +1230,23 @@ function DecisionTab({ decision, farmerName, onNav }) {
 }
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
-function DashboardTab({ onStart }) {
+function DashboardTab({ onStart, hasProfile, farmerName }) {
   const [h, setH] = useState(false);
   return (
     <div style={{ maxWidth:"560px" }}>
       <div style={{ marginBottom:"32px" }}>
-        <h2 style={{ fontSize:"32px", fontWeight:700, color:T.text, margin:"0 0 12px", letterSpacing:"-.02em" }}>Welcome to Artha</h2>
-        <p style={{ fontSize:"15px", color:T.textMid, lineHeight:1.8 }}>
-          Artha helps you figure out the best financial support for your farm — whether that's a government scheme, a loan, both, or neither.
-        </p>
+        {hasProfile ? (
+          <>
+            <div style={{ fontSize:"13px", fontWeight:600, color:T.accent, marginBottom:"8px", textTransform:"uppercase", letterSpacing:".1em" }}>Welcome back</div>
+            <h2 style={{ fontSize:"32px", fontWeight:700, color:T.text, margin:"0 0 12px", letterSpacing:"-.02em" }}>Hello, {farmerName} 👋</h2>
+            <p style={{ fontSize:"15px", color:T.textMid, lineHeight:1.8 }}>Your profile is saved. Run a fresh analysis or check a loan — your details will be filled in automatically.</p>
+          </>
+        ) : (
+          <>
+            <h2 style={{ fontSize:"32px", fontWeight:700, color:T.text, margin:"0 0 12px", letterSpacing:"-.02em" }}>Welcome to Artha</h2>
+            <p style={{ fontSize:"15px", color:T.textMid, lineHeight:1.8 }}>Artha helps you figure out the best financial support for your farm — whether that's a government scheme, a loan, both, or neither.</p>
+          </>
+        )}
       </div>
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"12px", marginBottom:"28px" }}>
         {[
@@ -1130,9 +1255,7 @@ function DashboardTab({ onStart }) {
           { icon:"💰", label:"Check If a Loan Is Right", desc:"Honest, personalised answer" },
           { icon:"⚖️", label:"Get a Clear Plan", desc:"Simple steps to follow" },
         ].map((f,i) => (
-          <div key={i} style={{ padding:"18px 20px", background:T.surface,
-            border:`1.5px solid ${T.border}`, borderRadius:"12px",
-            boxShadow:"0 1px 4px rgba(0,0,0,.04)" }}>
+          <div key={i} style={{ padding:"18px 20px", background:T.surface, border:`1.5px solid ${T.border}`, borderRadius:"12px", boxShadow:"0 1px 4px rgba(0,0,0,.04)" }}>
             <div style={{ fontSize:"24px", marginBottom:"8px" }}>{f.icon}</div>
             <div style={{ fontSize:"13px", fontWeight:600, color:T.text, marginBottom:"4px" }}>{f.label}</div>
             <div style={{ fontSize:"12px", color:T.textDim }}>{f.desc}</div>
@@ -1144,8 +1267,129 @@ function DashboardTab({ onStart }) {
           border:"none", borderRadius:"12px", fontSize:"15px", fontWeight:600, cursor:"pointer",
           transition:"all .2s", boxShadow:h?`0 8px 28px ${T.sidebar}60`:"0 2px 8px rgba(0,0,0,.12)",
           transform:h?"translateY(-2px)":"none" }}>
-        Get Started →
+        {hasProfile ? "Run New Analysis →" : "Get Started →"}
       </button>
+    </div>
+  );
+}
+
+// ─── My Profile Tab — UPDATED ─────────────────────────────────────────────────
+function MyProfileTab({ savedProfile, onSave, onClear }) {
+  const [form, setForm] = useState({ ...savedProfile });
+  const [saved, setSaved] = useState(false);
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const toggleRisk = (r) => {
+    const key = r.toLowerCase().replace(" ", "_");
+    set("risk_exposure", form.risk_exposure?.includes(key)
+      ? form.risk_exposure.filter(x => x !== key)
+      : [...(form.risk_exposure || []), key]);
+  };
+  const isRisk = (r) => (form.risk_exposure || []).includes(r.toLowerCase().replace(" ", "_"));
+  const visible = useFadeIn("myprofile");
+
+  const handleSave = () => {
+    if (!form.name || !form.monthly_income_inr) { alert("Please fill at least your name and income"); return; }
+    onSave(form);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2500);
+  };
+
+  return (
+    <div style={{ opacity:visible?1:0, transform:visible?"none":"translateY(10px)", transition:"all .35s ease" }}>
+      <div style={{ marginBottom:"32px" }}>
+        <h2 style={{ fontSize:"28px", fontWeight:600, color:T.text, margin:"0 0 8px" }}>My Profile</h2>
+        <p style={{ fontSize:"14px", color:T.textMid, lineHeight:1.7 }}>
+          Save your details once — they'll auto-fill every form so you never have to type them again.
+        </p>
+      </div>
+
+      {/* Photo upload — full width at top */}
+      <ProfileImageUpload
+        value={form.profile_image || null}
+        onChange={(img) => set("profile_image", img)}
+      />
+
+      {/* Personal Details — 3-col grid like Profile Analysis */}
+      <SectionCard title="Personal Details">
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:"20px" }}>
+          <div style={{ gridColumn:"1 / 2" }}>
+            <FieldLabel required>Your Name</FieldLabel>
+            <TextInput placeholder="e.g. Ramesh Patil" value={form.name||""} onChange={e=>set("name",e.target.value)} />
+          </div>
+          <div>
+            <FieldLabel>Your State</FieldLabel>
+            <SelectInput value={form.state||"Maharashtra"} onChange={e=>set("state",e.target.value)}>
+              {STATES.map(s=><option key={s}>{s}</option>)}
+            </SelectInput>
+          </div>
+          <div>
+            <FieldLabel>People in Your Family</FieldLabel>
+            <TextInput type="number" placeholder="e.g. 5" value={form.household_size||""} onChange={e=>set("household_size",e.target.value)} />
+          </div>
+          <div>
+            <FieldLabel>Land You Own (acres)</FieldLabel>
+            <TextInput type="number" placeholder="e.g. 2.5" value={form.land_acres||""} onChange={e=>set("land_acres",e.target.value)} />
+          </div>
+          <div>
+            <FieldLabel>Main Crop You Grow</FieldLabel>
+            <SelectInput value={form.crop_type||"Soybean"} onChange={e=>set("crop_type",e.target.value)}>
+              {CROP_TYPES.map(c=><option key={c}>{c}</option>)}
+            </SelectInput>
+          </div>
+        </div>
+      </SectionCard>
+
+      {/* Income & Debt — 3-col */}
+      <SectionCard title="Income & Debt">
+        <div style={{ marginBottom:"20px" }}>
+          <FieldLabel>How Do You Earn?</FieldLabel>
+          <div style={{ display:"flex", gap:"12px" }}>
+            {INCOME_TYPES.map(t=><PillToggle key={t} label={t} active={(form.income_type||"seasonal")===t.toLowerCase()} onClick={()=>set("income_type",t.toLowerCase())} />)}
+          </div>
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:"20px" }}>
+          <div>
+            <FieldLabel required>Monthly Income (₹)</FieldLabel>
+            <TextInput type="number" placeholder="e.g. 15000" value={form.monthly_income_inr||""} onChange={e=>set("monthly_income_inr",e.target.value)} />
+          </div>
+          <div>
+            <FieldLabel>Current Debt (₹)</FieldLabel>
+            <TextInput type="number" placeholder="0 if none" value={form.existing_debt_inr||""} onChange={e=>set("existing_debt_inr",e.target.value)} />
+          </div>
+        </div>
+      </SectionCard>
+
+      {/* Risks */}
+      <SectionCard title="Risks You Face">
+        <p style={{ fontSize:"13px", color:T.textMid, marginBottom:"14px" }}>Select everything that could affect your income.</p>
+        <div style={{ display:"flex", flexWrap:"wrap", gap:"10px" }}>
+          {RISK_OPTIONS.map(r=><RiskChip key={r} label={r} active={isRisk(r)} onClick={()=>toggleRisk(r)} />)}
+        </div>
+      </SectionCard>
+
+      {/* Actions */}
+      <div style={{ display:"flex", gap:"12px" }}>
+        <button onClick={handleSave}
+          style={{ flex:1, padding:"14px 24px", background:saved?T.green:T.sidebar,
+            color:"#fff", border:"none", borderRadius:"12px",
+            fontSize:"15px", fontWeight:600, cursor:"pointer", transition:"all .3s",
+            boxShadow:`0 2px 8px rgba(0,0,0,.1)` }}>
+          {saved ? "✓ Profile Saved!" : "Save My Profile"}
+        </button>
+        <button onClick={() => { onClear(); setForm({...DEFAULT_PROFILE}); }}
+          style={{ padding:"14px 20px", background:"transparent", color:T.red,
+            border:`1.5px solid ${T.red}30`, borderRadius:"12px",
+            fontSize:"14px", fontWeight:500, cursor:"pointer" }}>
+          Clear
+        </button>
+      </div>
+
+      <div style={{ marginTop:"16px", padding:"14px 18px", background:T.surfaceAlt,
+        borderRadius:"10px", border:`1px solid ${T.border}` }}>
+        <p style={{ fontSize:"12px", color:T.textDim, lineHeight:1.7, margin:0 }}>
+          🔒 Your profile is saved only on this device, in your browser. Nothing is sent to any server until you run an analysis.
+        </p>
+      </div>
     </div>
   );
 }
@@ -1157,10 +1401,12 @@ export default function App() {
   const [results, setResults] = useState(null);
   const [farmerName, setFarmerName] = useState("");
   const [error, setError] = useState(null);
+  const { profile: savedProfile, saveProfile, clearProfile, hasProfile } = useSavedProfile();
   const hasResults = !!results;
 
   const handleAnalyse = async (profileData) => {
     setLoading(true); setError(null); setFarmerName(profileData.name);
+    saveProfile(profileData);
     try {
       const res = await fetch(`${API_BASE}/analyse`, {
         method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(profileData)
@@ -1170,6 +1416,8 @@ export default function App() {
       setActiveTab("snapshot");
     } catch(e) { setError(e.message); } finally { setLoading(false); }
   };
+
+  const noStepBar = ["loan","myprofile"].includes(activeTab);
 
   return (
     <div style={{ display:"flex", minHeight:"100vh", background:T.bg }}>
@@ -1181,10 +1429,16 @@ export default function App() {
         @keyframes spin { from { transform:rotate(0deg); } to { transform:rotate(360deg); } }
       `}</style>
 
-      <Sidebar active={activeTab} onNav={setActiveTab} hasResults={hasResults} />
+      <Sidebar
+        active={activeTab}
+        onNav={setActiveTab}
+        hasResults={hasResults}
+        hasProfile={hasProfile}
+        profileImage={savedProfile?.profile_image || null}
+      />
 
       <main style={{ flex:1, padding:"44px 56px", overflowY:"auto" }}>
-        {activeTab !== "loan" && <StepBar current={TAB_STEP[activeTab]||1} />}
+        {!noStepBar && <StepBar current={TAB_STEP[activeTab]||1} />}
         {error && (
           <div style={{ background:T.redLight, border:`1px solid #f0c8c0`, borderRadius:"12px",
             padding:"16px 20px", marginBottom:"24px", fontSize:"14px", color:T.red }}>
@@ -1192,12 +1446,13 @@ export default function App() {
             <div style={{ fontSize:"12px", color:T.textDim, marginTop:"4px" }}>Make sure the backend is running at {API_BASE}</div>
           </div>
         )}
-        {activeTab==="dashboard" && <DashboardTab onStart={()=>setActiveTab("profile")} />}
-        {activeTab==="profile" && <ProfileTab onSubmit={handleAnalyse} loading={loading} />}
+        {activeTab==="dashboard" && <DashboardTab onStart={()=>setActiveTab("profile")} hasProfile={hasProfile} farmerName={savedProfile.name} />}
+        {activeTab==="profile" && <ProfileTab onSubmit={handleAnalyse} loading={loading} savedProfile={savedProfile} />}
         {activeTab==="snapshot" && results && <SnapshotTab data={results} farmerName={farmerName} onNav={setActiveTab} />}
         {activeTab==="scheme" && results && <SchemesTab schemes={results.scheme_recommendations} onNav={setActiveTab} />}
         {activeTab==="decisions" && results && <DecisionTab decision={results.final_decision} farmerName={farmerName} onNav={setActiveTab} />}
-        {activeTab==="loan" && <LoanTab />}
+        {activeTab==="loan" && <LoanTab savedProfile={savedProfile} />}
+        {activeTab==="myprofile" && <MyProfileTab savedProfile={savedProfile} onSave={saveProfile} onClear={clearProfile} />}
       </main>
     </div>
   );
