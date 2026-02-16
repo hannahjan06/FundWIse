@@ -1,4 +1,6 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+import base64
+import re
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
@@ -531,3 +533,134 @@ Include all {tenure} months in monthly_breakdown. Make tips specific and practic
 
     result = call_groq(prompt, max_tokens=2500)
     return {"repayment_plan": result, "meta": {"provider": "groq", "model": GROQ_MODEL}}
+
+@app.post("/analyse-document")
+async def analyse_document(file: UploadFile = File(...)):
+    """Analyse a loan agreement or financial document for risks."""
+    try:
+        content = await file.read()
+        filename = file.filename or "document"
+        ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+
+        # Extract text based on file type
+        raw_text = ""
+
+        if ext in ["txt", "md"]:
+            raw_text = content.decode("utf-8", errors="ignore")
+
+        elif ext == "pdf":
+            try:
+                import io
+                import pdfplumber
+                with pdfplumber.open(io.BytesIO(content)) as pdf:
+                    raw_text = "\n".join(
+                        page.extract_text() or "" for page in pdf.pages
+                    )
+            except ImportError:
+                # fallback: try raw decode
+                raw_text = content.decode("utf-8", errors="ignore")[:8000]
+
+        elif ext in ["doc", "docx"]:
+            try:
+                import io
+                import docx
+                doc = docx.Document(io.BytesIO(content))
+                raw_text = "\n".join(p.text for p in doc.paragraphs)
+            except Exception:
+                raw_text = content.decode("utf-8", errors="ignore")[:8000]
+
+        else:
+            # Try plain text decode for anything else
+            raw_text = content.decode("utf-8", errors="ignore")[:8000]
+
+        if not raw_text.strip():
+            raise HTTPException(
+                status_code=400,
+                detail="Could not extract text from this file. Try a PDF or text file."
+            )
+
+        # Truncate to avoid token limits
+        text_snippet = raw_text[:6000]
+
+        prompt = f"""You are an expert at analysing loan agreements and financial documents to protect Indian farmers from predatory lending.
+
+Carefully read this document and identify ALL risks, hidden clauses, and red flags that could harm a farmer.
+
+DOCUMENT TEXT:
+---
+{text_snippet}
+---
+
+Be thorough. Look for:
+- Hidden fees, charges, or penalties
+- Variable/floating interest rates disguised in fine print
+- Balloon payments or lump sum demands
+- Collateral clauses that could cause land loss
+- Automatic renewal traps
+- Prepayment penalties
+- Cross-collateralisation (linking multiple assets)
+- Vague or ambiguous language that favours the lender
+- Unrealistic repayment schedules
+- Clauses waiving legal rights
+- Personal guarantee requirements
+- Insurance requirements that benefit lender only
+- Grace period absence
+- Compound interest hidden as flat rate
+
+Return this JSON:
+{{
+  "document_type": "<type of document e.g. Loan Agreement, Promissory Note, Mortgage Deed>",
+  "overall_risk": "low or medium or high or critical",
+  "risk_summary": "<2-3 plain sentences summarising the main danger level for a farmer>",
+  "danger_score": <0-100 where 100 is most dangerous>,
+  "red_flags": [
+    {{
+      "title": "<short name of the issue>",
+      "severity": "low or medium or high or critical",
+      "clause_text": "<exact or near-exact quote from the document if found, else null>",
+      "plain_explanation": "<explain in simple words what this means for the farmer>",
+      "potential_impact": "<what could happen to the farmer because of this>",
+      "recommendation": "<what the farmer should do about this>"
+    }}
+  ],
+  "green_flags": [
+    {{
+      "title": "<something fair or farmer-friendly>",
+      "explanation": "<why this is good>"
+    }}
+  ],
+  "key_terms": {{
+    "interest_rate": "<rate found or null>",
+    "tenure": "<loan period found or null>",
+    "emi_amount": "<monthly payment found or null>",
+    "collateral": "<what is pledged or null>",
+    "processing_fee": "<fee found or null>",
+    "prepayment_penalty": "<penalty found or null>",
+    "late_payment_penalty": "<penalty found or null>"
+  }},
+  "questions_to_ask_lender": [
+    "<specific question the farmer should ask before signing>",
+    "<another important question>",
+    "<another important question>"
+  ],
+  "verdict": "<one honest sentence: should the farmer sign this, negotiate, or walk away?>",
+  "immediate_actions": [
+    "<most urgent thing to do right now>",
+    "<second action>",
+    "<third action>"
+  ]
+}}"""
+
+        result = call_groq(prompt, max_tokens=2000)
+        result["filename"] = filename
+        result["file_size_kb"] = round(len(content) / 1024, 1)
+        result["text_extracted"] = len(raw_text) > 0
+        result["characters_analysed"] = len(text_snippet)
+
+        return {"analysis": result, "meta": {"provider": "groq", "model": GROQ_MODEL}}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[DOC ANALYSIS ERROR] {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")

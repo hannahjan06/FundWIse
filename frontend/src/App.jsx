@@ -473,6 +473,7 @@ const NAV_MAIN = [
   },
   {id:"loan", label:"Loan Assessment"},
   {id:"browse_schemes", label:"Browse Schemes"},
+  {id:"loan_analyser", label:"Loan Analyser"},
   {id:"my_documents", label:"My Documents"},
 ];
 
@@ -572,9 +573,9 @@ function Sidebar({ active, onNav, hasResults, hasProfile, profileImage }) {
               key={item.id} 
               label={item.label} 
               active={active===item.id}
-              enabled={["dashboard","profile","loan","myprofile","browse_schemes","my_documents"].includes(item.id) ? true : hasResults}
+              enabled={["dashboard","profile","loan","myprofile","browse_schemes","my_documents","loan_analyser"].includes(item.id) ? true : hasResults}
               onClick={() => {
-                const canAccess = ["dashboard","profile","loan","myprofile","browse_schemes","my_documents"].includes(item.id) ? true : hasResults;
+                const canAccess = ["dashboard","profile","loan","myprofile","browse_schemes","my_documents","loan_analyser"].includes(item.id) ? true : hasResults;
                 if (canAccess) onNav(item.id);
               }}
             />
@@ -2206,6 +2207,454 @@ function MyProfileTab({ savedProfile, onSave, onClear }) {
   );
 }
 
+// ─── Loan Analyser Tab ───────────────────────────────────────────────────────
+function RiskBadge({ level }) {
+  const map = {
+    low:      { bg:"#eaf7f0", text:"#3a9a64", border:"#c0e8d0", label:"Low Risk" },
+    medium:   { bg:"#fef4ea", text:"#c87a30", border:"#f0d8b8", label:"Medium Risk" },
+    high:     { bg:"#fdf0ee", text:"#c84a3a", border:"#f0c8c0", label:"High Risk" },
+    critical: { bg:"#fbe8e6", text:"#a83228", border:"#e8b0a8", label:"⚠ Critical" },
+  };
+  const c = map[level?.toLowerCase()] || map.medium;
+  return (
+    <span style={{ display:"inline-block", padding:"4px 14px", borderRadius:"20px",
+      background:c.bg, color:c.text, border:`1px solid ${c.border}`,
+      fontSize:"12px", fontWeight:700, textTransform:"capitalize" }}>
+      {c.label}
+    </span>
+  );
+}
+
+function DangerMeter({ score }) {
+  const [animated, setAnimated] = useState(false);
+  useEffect(() => { const t = setTimeout(() => setAnimated(true), 300); return () => clearTimeout(t); }, []);
+  const color = score < 30 ? T.green : score < 60 ? T.amber : T.red;
+  return (
+    <div>
+      <div style={{ display:"flex", justifyContent:"space-between", marginBottom:"8px" }}>
+        <span style={{ fontSize:"12px", color:T.textDim, fontWeight:600 }}>Danger Score</span>
+        <span style={{ fontSize:"20px", fontWeight:700, color }}>{score}/100</span>
+      </div>
+      <div style={{ background:T.border, borderRadius:"8px", height:"12px", overflow:"hidden" }}>
+        <div style={{
+          height:"100%", borderRadius:"8px",
+          width: animated ? `${score}%` : "0%",
+          background: score < 30
+            ? `linear-gradient(90deg, ${T.green}, #5ab87a)`
+            : score < 60
+            ? `linear-gradient(90deg, ${T.amber}, #e09a50)`
+            : `linear-gradient(90deg, ${T.red}, #e06050)`,
+          transition:"width 1.2s cubic-bezier(.4,0,.2,1)"
+        }}/>
+      </div>
+      <div style={{ display:"flex", justifyContent:"space-between", marginTop:"4px" }}>
+        <span style={{ fontSize:"10px", color:T.green }}>Safe</span>
+        <span style={{ fontSize:"10px", color:T.amber }}>Risky</span>
+        <span style={{ fontSize:"10px", color:T.red }}>Dangerous</span>
+      </div>
+    </div>
+  );
+}
+
+function RedFlagCard({ flag, index }) {
+  const [open, setOpen] = useState(false);
+  const sevColor = {
+    low: T.green, medium: T.amber, high: T.red, critical: "#a83228"
+  }[flag.severity?.toLowerCase()] || T.amber;
+  const sevBg = {
+    low: T.greenLight, medium: T.amberLight, high: T.redLight, critical: "#fbe8e6"
+  }[flag.severity?.toLowerCase()] || T.amberLight;
+
+  return (
+    <div style={{ borderRadius:"12px", border:`1.5px solid ${sevColor}30`,
+      background:sevBg, overflow:"hidden", transition:"all .2s" }}>
+      <button onClick={() => setOpen(!open)}
+        style={{ width:"100%", display:"flex", alignItems:"center", gap:"12px",
+          padding:"14px 18px", background:"transparent", border:"none", cursor:"pointer",
+          textAlign:"left" }}>
+        <div style={{ width:"28px", height:"28px", borderRadius:"50%", flexShrink:0,
+          background:`${sevColor}20`, border:`2px solid ${sevColor}50`,
+          display:"flex", alignItems:"center", justifyContent:"center",
+          fontSize:"12px", fontWeight:700, color:sevColor }}>{index + 1}</div>
+        <div style={{ flex:1 }}>
+          <div style={{ fontSize:"13px", fontWeight:700, color:T.text }}>{flag.title}</div>
+          <div style={{ fontSize:"11px", color:sevColor, fontWeight:600, textTransform:"uppercase",
+            letterSpacing:".08em", marginTop:"2px" }}>{flag.severity} severity</div>
+        </div>
+        <span style={{ fontSize:"12px", color:T.textDim, transform:open?"rotate(180deg)":"none",
+          transition:"transform .2s" }}>▼</span>
+      </button>
+
+      {open && (
+        <div style={{ padding:"0 18px 16px", borderTop:`1px solid ${sevColor}20` }}>
+          {flag.clause_text && (
+            <div style={{ background:"rgba(0,0,0,.04)", borderRadius:"8px", padding:"10px 14px",
+              marginBottom:"12px", marginTop:"12px", borderLeft:`3px solid ${sevColor}` }}>
+              <div style={{ fontSize:"10px", fontWeight:700, color:T.textDim, marginBottom:"4px",
+                textTransform:"uppercase", letterSpacing:".08em" }}>From the document:</div>
+              <div style={{ fontSize:"12px", color:T.textMid, fontStyle:"italic",
+                lineHeight:1.6 }}>"{flag.clause_text}"</div>
+            </div>
+          )}
+          <div style={{ display:"grid", gap:"10px", marginTop: flag.clause_text ? "0" : "12px" }}>
+            <div>
+              <div style={{ fontSize:"11px", fontWeight:700, color:T.textDim, marginBottom:"4px",
+                textTransform:"uppercase" }}>What this means for you</div>
+              <div style={{ fontSize:"13px", color:T.text, lineHeight:1.7 }}>{flag.plain_explanation}</div>
+            </div>
+            <div style={{ background:`${sevColor}10`, borderRadius:"8px", padding:"10px 14px" }}>
+              <div style={{ fontSize:"11px", fontWeight:700, color:sevColor, marginBottom:"4px",
+                textTransform:"uppercase" }}>⚠ Potential Impact</div>
+              <div style={{ fontSize:"13px", color:T.text, lineHeight:1.7 }}>{flag.potential_impact}</div>
+            </div>
+            <div style={{ background:T.greenLight, borderRadius:"8px", padding:"10px 14px" }}>
+              <div style={{ fontSize:"11px", fontWeight:700, color:T.green, marginBottom:"4px",
+                textTransform:"uppercase" }}>💡 What to do</div>
+              <div style={{ fontSize:"13px", color:T.text, lineHeight:1.7 }}>{flag.recommendation}</div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LoanAnalyserTab({ onFileSaved }) {
+  const [dragging, setDragging] = useState(false);
+  const [file, setFile] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState(null);
+  const [saved, setSaved] = useState(false);
+  const fileRef = useRef(null);
+  const visible = useFadeIn("loan_analyser");
+
+  const ACCEPTED = [".pdf",".txt",".doc",".docx",".md"];
+
+  const handleFile = (f) => {
+    if (!f) return;
+    const ext = "." + f.name.split(".").pop().toLowerCase();
+    if (!ACCEPTED.includes(ext)) {
+      setError(`Unsupported file type. Please upload: ${ACCEPTED.join(", ")}`);
+      return;
+    }
+    setFile(f);
+    setResult(null);
+    setError(null);
+    setSaved(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault(); setDragging(false);
+    handleFile(e.dataTransfer.files[0]);
+  };
+
+  const handleAnalyse = async () => {
+    if (!file) return;
+    setLoading(true); setError(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch(`${API_BASE}/analyse-document`, {
+        method:"POST", body: formData
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || "Analysis failed");
+      }
+      const data = await res.json();
+      setResult(data.analysis);
+    } catch(e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Save to My Documents
+  const handleSaveToDocuments = () => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const DOCS_KEY = "artha_documents";
+      const existing = JSON.parse(localStorage.getItem(DOCS_KEY) || "[]");
+      const newDoc = {
+        id: Date.now() + Math.random(),
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        dataUrl: e.target.result,
+        folder: "Loan Documents",
+        uploadedAt: new Date().toISOString(),
+        riskLevel: result?.overall_risk || null,
+      };
+      localStorage.setItem(DOCS_KEY, JSON.stringify([...existing, newDoc]));
+      setSaved(true);
+      if (onFileSaved) onFileSaved();
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const overallColor = {
+    low: T.green, medium: T.amber, high: T.red, critical: "#a83228"
+  }[result?.overall_risk?.toLowerCase()] || T.amber;
+
+  return (
+    <div style={{ maxWidth:"860px", opacity:visible?1:0, transform:visible?"none":"translateY(10px)",
+      transition:"all .35s ease" }}>
+
+      {/* Header */}
+      <div style={{ marginBottom:"28px" }}>
+        <h2 style={{ fontSize:"28px", fontWeight:600, color:T.text, margin:"0 0 6px" }}>
+          Loan Agreement Analyser
+        </h2>
+        <p style={{ fontSize:"14px", color:T.textMid, lineHeight:1.7, maxWidth:"560px" }}>
+          Upload any loan agreement, promissory note, or financial document. We'll scan it for hidden risks, unfair clauses, and things loan sharks don't want you to notice.
+        </p>
+      </div>
+
+      {/* Upload zone */}
+      {!result && (
+        <div style={{ marginBottom:"20px" }}>
+          <div
+            onDragOver={e=>{e.preventDefault();setDragging(true);}}
+            onDragLeave={()=>setDragging(false)}
+            onDrop={handleDrop}
+            onClick={()=>!file && fileRef.current?.click()}
+            style={{ border:`2px dashed ${dragging?T.accent:file?T.green:T.border}`,
+              borderRadius:"16px", padding:"48px 24px", textAlign:"center",
+              background:dragging?T.accentLight:file?T.greenLight:T.surfaceAlt,
+              cursor:file?"default":"pointer", transition:"all .2s" }}>
+            <div style={{ fontSize:"44px", marginBottom:"12px" }}>
+              {file ? "📄" : "⬆️"}
+            </div>
+            {file ? (
+              <>
+                <div style={{ fontSize:"15px", fontWeight:700, color:T.green, marginBottom:"4px" }}>
+                  {file.name}
+                </div>
+                <div style={{ fontSize:"12px", color:T.textDim, marginBottom:"16px" }}>
+                  {(file.size/1024).toFixed(1)} KB · Ready to analyse
+                </div>
+                <div style={{ display:"flex", gap:"10px", justifyContent:"center" }}>
+                  <button onClick={handleAnalyse} disabled={loading}
+                    style={{ padding:"12px 28px", background:T.sidebar, color:"#fff",
+                      border:"none", borderRadius:"10px", fontSize:"14px", fontWeight:700,
+                      cursor:"pointer", boxShadow:`0 4px 16px ${T.sidebar}40` }}>
+                    {loading ? "Analysing..." : "🔍 Analyse Document"}
+                  </button>
+                  <button onClick={e=>{e.stopPropagation();setFile(null);}}
+                    style={{ padding:"12px 20px", background:"transparent",
+                      border:`1.5px solid ${T.border}`, borderRadius:"10px",
+                      fontSize:"13px", color:T.textMid, cursor:"pointer" }}>
+                    Change File
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{ fontSize:"15px", fontWeight:600, color:T.text, marginBottom:"6px" }}>
+                  Drop your loan document here
+                </div>
+                <div style={{ fontSize:"12px", color:T.textDim, marginBottom:"20px" }}>
+                  Supports PDF, Word (.doc/.docx), and plain text files
+                </div>
+                <button onClick={e=>{e.stopPropagation();fileRef.current?.click();}}
+                  style={{ padding:"11px 26px", background:T.sidebar, color:"#fff",
+                    border:"none", borderRadius:"10px", fontSize:"13px",
+                    fontWeight:600, cursor:"pointer" }}>
+                  Choose File
+                </button>
+              </>
+            )}
+            <input ref={fileRef} type="file" accept=".pdf,.txt,.doc,.docx,.md"
+              style={{ display:"none" }} onChange={e=>handleFile(e.target.files?.[0])} />
+          </div>
+
+          {error && (
+            <div style={{ marginTop:"12px", padding:"12px 16px", background:T.redLight,
+              borderRadius:"10px", border:`1px solid #f0c8c0`, fontSize:"13px", color:T.red }}>
+              ⚠ {error}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Loading */}
+      {loading && (
+        <div style={{ display:"flex", flexDirection:"column", alignItems:"center", padding:"60px" }}>
+          <div style={{ width:"48px", height:"48px", border:"3px solid #e0e0e0",
+            borderTop:`3px solid ${T.accent}`, borderRadius:"50%",
+            animation:"spin 1s linear infinite", marginBottom:"20px" }}/>
+          <div style={{ fontSize:"15px", fontWeight:600, color:T.text, marginBottom:"6px" }}>
+            Reading your document...
+          </div>
+          <div style={{ fontSize:"13px", color:T.textDim }}>
+            Scanning for hidden clauses, risky terms, and red flags
+          </div>
+        </div>
+      )}
+
+      {/* Results */}
+      {result && !loading && (
+        <div>
+          {/* Top banner */}
+          <div style={{ background: result.overall_risk==="low" ? T.greenLight
+              : result.overall_risk==="critical" ? "#fbe8e6" : T.amberLight,
+            border:`2px solid ${overallColor}40`, borderRadius:"16px",
+            padding:"24px 28px", marginBottom:"20px",
+            display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:"20px" }}>
+            <div style={{ flex:1 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:"12px", marginBottom:"10px" }}>
+                <span style={{ fontSize:"32px" }}>
+                  {result.overall_risk==="low"?"✅":result.overall_risk==="critical"?"🚨":"⚠️"}
+                </span>
+                <div>
+                  <div style={{ fontSize:"11px", fontWeight:700, color:T.textDim,
+                    textTransform:"uppercase", letterSpacing:".1em", marginBottom:"3px" }}>
+                    {result.document_type || "Document"} · {result.file_size_kb} KB
+                  </div>
+                  <RiskBadge level={result.overall_risk} />
+                </div>
+              </div>
+              <p style={{ fontSize:"14px", color:T.text, lineHeight:1.8, margin:"0 0 16px" }}>
+                {result.risk_summary}
+              </p>
+              <div style={{ fontStyle:"italic", fontSize:"14px", fontWeight:600,
+                color:overallColor, padding:"10px 16px", background:`${overallColor}10`,
+                borderRadius:"8px", borderLeft:`3px solid ${overallColor}` }}>
+                {result.verdict}
+              </div>
+            </div>
+            <div style={{ width:"200px", flexShrink:0 }}>
+              <DangerMeter score={result.danger_score || 0} />
+            </div>
+          </div>
+
+          {/* Key terms strip */}
+          {result.key_terms && (
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:"10px", marginBottom:"20px" }}>
+              {[
+                { label:"Interest Rate", val:result.key_terms.interest_rate },
+                { label:"Tenure", val:result.key_terms.tenure },
+                { label:"Monthly EMI", val:result.key_terms.emi_amount },
+                { label:"Collateral", val:result.key_terms.collateral },
+                { label:"Processing Fee", val:result.key_terms.processing_fee },
+                { label:"Late Penalty", val:result.key_terms.late_payment_penalty },
+                { label:"Prepayment Penalty", val:result.key_terms.prepayment_penalty },
+              ].filter(t => t.val && t.val !== "null" && t.val !== null).slice(0,4).map((t,i) => (
+                <div key={i} style={{ background:T.surface, border:`1px solid ${T.border}`,
+                  borderRadius:"12px", padding:"14px 16px" }}>
+                  <div style={{ fontSize:"10px", color:T.textDim, fontWeight:600,
+                    textTransform:"uppercase", letterSpacing:".08em", marginBottom:"6px" }}>
+                    {t.label}
+                  </div>
+                  <div style={{ fontSize:"13px", fontWeight:700, color:T.text }}>{t.val}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"16px", marginBottom:"16px" }}>
+            {/* Red flags */}
+            <div>
+              <div style={{ fontSize:"11px", fontWeight:700, color:T.red, textTransform:"uppercase",
+                letterSpacing:".12em", marginBottom:"12px", display:"flex", alignItems:"center", gap:"6px" }}>
+                🚩 Red Flags ({result.red_flags?.length || 0})
+              </div>
+              <div style={{ display:"grid", gap:"8px" }}>
+                {(result.red_flags || []).length === 0 ? (
+                  <div style={{ padding:"20px", background:T.greenLight, borderRadius:"12px",
+                    textAlign:"center", fontSize:"13px", color:T.green }}>
+                    ✓ No red flags found
+                  </div>
+                ) : (result.red_flags || []).map((flag, i) => (
+                  <RedFlagCard key={i} flag={flag} index={i} />
+                ))}
+              </div>
+            </div>
+
+            {/* Right column */}
+            <div style={{ display:"grid", gap:"16px", alignContent:"start" }}>
+              {/* Green flags */}
+              {(result.green_flags || []).length > 0 && (
+                <SectionCard title="✅ Farmer-Friendly Clauses">
+                  <div style={{ display:"grid", gap:"8px" }}>
+                    {result.green_flags.map((g, i) => (
+                      <div key={i} style={{ padding:"10px 14px", background:T.greenLight,
+                        borderRadius:"8px", border:`1px solid #c0e8d0` }}>
+                        <div style={{ fontSize:"12px", fontWeight:700, color:T.green,
+                          marginBottom:"3px" }}>{g.title}</div>
+                        <div style={{ fontSize:"12px", color:T.textMid,
+                          lineHeight:1.6 }}>{g.explanation}</div>
+                      </div>
+                    ))}
+                  </div>
+                </SectionCard>
+              )}
+
+              {/* Questions to ask */}
+              {(result.questions_to_ask_lender || []).length > 0 && (
+                <SectionCard title="❓ Questions to Ask the Lender">
+                  <div style={{ display:"grid", gap:"8px" }}>
+                    {result.questions_to_ask_lender.map((q, i) => (
+                      <div key={i} style={{ display:"flex", gap:"10px", padding:"10px 14px",
+                        background:T.surfaceAlt, borderRadius:"8px" }}>
+                        <span style={{ fontWeight:700, color:T.blue, flexShrink:0 }}>{i+1}.</span>
+                        <span style={{ fontSize:"13px", color:T.text, lineHeight:1.6 }}>{q}</span>
+                      </div>
+                    ))}
+                  </div>
+                </SectionCard>
+              )}
+
+              {/* Immediate actions */}
+              {(result.immediate_actions || []).length > 0 && (
+                <SectionCard title="⚡ Do This Now">
+                  <div style={{ display:"grid", gap:"8px" }}>
+                    {result.immediate_actions.map((a, i) => (
+                      <div key={i} style={{ display:"flex", gap:"10px", padding:"10px 14px",
+                        background:i===0?T.accentLight:T.surfaceAlt, borderRadius:"8px",
+                        border:i===0?`1px solid ${T.accent}30`:"none" }}>
+                        <span style={{ fontWeight:700, color:T.accent, flexShrink:0 }}>{i+1}.</span>
+                        <span style={{ fontSize:"13px", color:T.text, lineHeight:1.6,
+                          fontWeight:i===0?600:400 }}>{a}</span>
+                      </div>
+                    ))}
+                  </div>
+                </SectionCard>
+              )}
+            </div>
+          </div>
+
+          {/* Bottom actions */}
+          <div style={{ display:"flex", gap:"12px", marginTop:"8px" }}>
+            <button onClick={handleSaveToDocuments} disabled={saved}
+              style={{ flex:1, padding:"14px", background:saved?T.green:T.sidebar,
+                color:"#fff", border:"none", borderRadius:"12px", fontSize:"14px",
+                fontWeight:700, cursor:saved?"default":"pointer", transition:"all .3s" }}>
+              {saved ? "✓ Saved to My Documents" : "💾 Save to My Documents"}
+            </button>
+            <button onClick={()=>{setResult(null);setFile(null);setSaved(false);}}
+              style={{ padding:"14px 24px", background:"transparent",
+                border:`1.5px solid ${T.border}`, borderRadius:"12px",
+                fontSize:"13px", color:T.textMid, cursor:"pointer" }}>
+              Analyse Another
+            </button>
+          </div>
+
+          <div style={{ marginTop:"12px", padding:"14px 18px", background:T.surfaceAlt,
+            borderRadius:"10px", border:`1px solid ${T.border}` }}>
+            <p style={{ fontSize:"12px", color:T.textDim, lineHeight:1.7, margin:0 }}>
+              <strong style={{ color:T.textMid }}>Note:</strong> This is an AI-assisted review, not legal advice. Always consult a legal professional or NABARD officer before signing any agreement.
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── My Documents Tab ────────────────────────────────────────────────────────
 const DOCS_KEY = "artha_documents";
 
@@ -2451,7 +2900,7 @@ export default function App() {
     } catch(e) { setError(e.message); } finally { setLoading(false); }
   };
 
-  const noStepBar = ["dashboard","loan","myprofile","browse_schemes","my_documents"].includes(activeTab);
+  const noStepBar = ["dashboard","loan","myprofile","browse_schemes","my_documents","loan_analyser"].includes(activeTab);
 
   return (
     <div style={{ display:"flex", minHeight:"100vh", background:T.bg }}>
@@ -2491,6 +2940,7 @@ export default function App() {
         {activeTab==="scheme" && results && <SchemesTab schemes={results.scheme_recommendations} onNav={setActiveTab} />}
         {activeTab==="decisions" && results && <DecisionTab decision={results.final_decision} farmerName={farmerName} onNav={setActiveTab} />}
         {activeTab==="loan" && <LoanTab savedProfile={savedProfile} />}
+        {activeTab==="loan_analyser" && <LoanAnalyserTab onFileSaved={()=>{}} />}
         {activeTab==="my_documents" && <MyDocumentsTab />}
         {activeTab==="myprofile" && <MyProfileTab savedProfile={savedProfile} onSave={saveProfile} onClear={clearProfile} />}
       </main>
